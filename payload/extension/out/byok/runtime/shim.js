@@ -5,10 +5,12 @@ const { ensureConfigManager, state } = require("../config/state");
 const { decideRoute } = require("../core/router");
 const { normalizeEndpoint, normalizeString, safeTransform, emptyAsyncGenerator } = require("../infra/util");
 const { ensureModelRegistryFeatureFlags } = require("../core/model-registry");
-const { openAiCompleteText, openAiStreamTextDeltas } = require("../providers/openai");
-const { anthropicCompleteText, anthropicStreamTextDeltas } = require("../providers/anthropic");
+const { openAiCompleteText, openAiStreamTextDeltas, openAiChatStreamChunks } = require("../providers/openai");
+const { anthropicCompleteText, anthropicStreamTextDeltas, anthropicChatStreamChunks } = require("../providers/anthropic");
 const { joinBaseUrl, safeFetch, readTextLimit } = require("../providers/http");
 const { getOfficialConnection } = require("../config/official");
+const { normalizeAugmentChatRequest, buildSystemPrompt, convertOpenAiTools, convertAnthropicTools, buildToolMetaByName, buildOpenAiMessages, buildAnthropicMessages } = require("../core/augment-chat");
+const { STOP_REASON_END_TURN, makeBackChatChunk } = require("../core/augment-protocol");
 const {
   buildMessagesForEndpoint,
   makeBackTextResult,
@@ -144,6 +146,31 @@ async function* byokStreamText({ provider, model, system, messages, timeoutMs, a
   throw new Error(`未知 provider.type: ${type}`);
 }
 
+async function* byokChatStream({ provider, model, body, timeoutMs, abortSignal }) {
+  const { type, baseUrl, apiKey, extraHeaders, requestDefaults } = providerRequestContext(provider);
+  const req = normalizeAugmentChatRequest(body);
+  const msg = normalizeString(req.message);
+  const hasNodes = Array.isArray(req.nodes) && req.nodes.length;
+  const hasHistory = Array.isArray(req.chat_history) && req.chat_history.length;
+  const hasReqNodes = (Array.isArray(req.structured_request_nodes) && req.structured_request_nodes.length) || (Array.isArray(req.request_nodes) && req.request_nodes.length);
+  if (!msg && !hasNodes && !hasHistory && !hasReqNodes) {
+    yield makeBackChatChunk({ text: "", stop_reason: STOP_REASON_END_TURN });
+    return;
+  }
+  const toolMetaByName = buildToolMetaByName(req.tool_definitions);
+  const fdf = req && typeof req === "object" && req.feature_detection_flags && typeof req.feature_detection_flags === "object" ? req.feature_detection_flags : {};
+  const supportToolUseStart = fdf.support_tool_use_start === true || fdf.supportToolUseStart === true;
+  if (type === "openai_compatible") {
+    yield* openAiChatStreamChunks({ baseUrl, apiKey, model, messages: buildOpenAiMessages(req), tools: convertOpenAiTools(req.tool_definitions), timeoutMs, abortSignal, extraHeaders, requestDefaults, toolMetaByName, supportToolUseStart });
+    return;
+  }
+  if (type === "anthropic") {
+    yield* anthropicChatStreamChunks({ baseUrl, apiKey, model, system: buildSystemPrompt(req), messages: buildAnthropicMessages(req), tools: convertAnthropicTools(req.tool_definitions), timeoutMs, abortSignal, extraHeaders, requestDefaults, toolMetaByName, supportToolUseStart });
+    return;
+  }
+  throw new Error(`未知 provider.type: ${type}`);
+}
+
 async function fetchOfficialGetModels({ completionURL, apiToken, timeoutMs, abortSignal }) {
   const url = joinBaseUrl(normalizeString(completionURL), "get-models");
   if (!url) throw new Error("completionURL 无效（无法请求官方 get-models）");
@@ -225,9 +252,8 @@ async function maybeHandleCallApi({ endpoint, body, transform, timeoutMs, abortS
 
   if (ep === "/chat") {
     const { system, messages } = buildMessagesForEndpoint(ep, body);
-    const nodes = body && typeof body === "object" ? body.nodes : [];
     const text = await byokCompleteText({ provider: route.provider, model: route.model, system, messages, timeoutMs: t, abortSignal });
-    return safeTransform(transform, makeBackChatResult(text, { nodes, includeNodes: true }), ep);
+    return safeTransform(transform, makeBackChatResult(text, { nodes: [] }), ep);
   }
 
   if (ep === "/next_edit_loc") {
@@ -255,17 +281,16 @@ async function maybeHandleCallApiStream({ endpoint, body, transform, timeoutMs, 
 
   if (isTelemetryDisabled(cfg, ep)) return emptyAsyncGenerator();
 
-  if (ep === "/chat-stream" || ep === "/prompt-enhancer" || ep === "/generate-conversation-title") {
+  if (ep === "/chat-stream") {
+    const src = byokChatStream({ provider: route.provider, model: route.model, body, timeoutMs: t, abortSignal });
+    return (async function* () { for await (const raw of src) yield safeTransform(transform, raw, ep); })();
+  }
+
+  if (ep === "/prompt-enhancer" || ep === "/generate-conversation-title") {
     const { system, messages } = buildMessagesForEndpoint(ep, body);
-    const nodes = body && typeof body === "object" ? body.nodes : [];
     const src = byokStreamText({ provider: route.provider, model: route.model, system, messages, timeoutMs: t, abortSignal });
     return (async function* () {
-      let first = true;
-      for await (const delta of src) {
-        const raw = makeBackChatResult(delta, { nodes, includeNodes: first });
-        first = false;
-        yield safeTransform(transform, raw, ep);
-      }
+      for await (const delta of src) yield safeTransform(transform, makeBackChatResult(delta, { nodes: [] }), ep);
     })();
   }
 
