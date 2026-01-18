@@ -170,11 +170,12 @@
 
         if (providerType === "openai_responses") {
           if (level === "custom") continue;
-          const effort = level === "extra" ? "high" : level;
-          if (effort === "low" || effort === "medium" || effort === "high") {
+          const effort = level === "extra" ? "extra_high" : level;
+          if (effort === "low" || effort === "medium" || effort === "high" || effort === "extra_high") {
             const reasoning = rd.reasoning && typeof rd.reasoning === "object" && !Array.isArray(rd.reasoning) ? rd.reasoning : {};
             reasoning.effort = effort;
             rd.reasoning = reasoning;
+            try { delete rd.__byok_thinking_level; } catch { }
           } else {
             if (rd.reasoning && typeof rd.reasoning === "object" && !Array.isArray(rd.reasoning)) {
               try { delete rd.reasoning.effort; } catch { }
@@ -182,6 +183,7 @@
                 try { delete rd.reasoning; } catch { }
               }
             }
+            try { delete rd.__byok_thinking_level; } catch { }
           }
           p.requestDefaults = rd;
           continue;

@@ -415,11 +415,26 @@
 	          const requestDefaults = p?.requestDefaults && typeof p.requestDefaults === "object" && !Array.isArray(p.requestDefaults) ? p.requestDefaults : {};
 	          const thinkingUi = (() => {
 	            if (type === "openai_responses") {
+	              const uiThinkingLevel = normalizeStr(requestDefaults.__byok_thinking_level);
 	              const reasoning =
 	                requestDefaults.reasoning && typeof requestDefaults.reasoning === "object" && !Array.isArray(requestDefaults.reasoning) ? requestDefaults.reasoning : {};
 	              const raw = normalizeStr(reasoning.effort);
-	              const v = raw === "low" || raw === "medium" || raw === "high" ? raw : raw ? "custom" : "";
-	              return { supported: true, value: v, hint: "OpenAI Responses：写入 requestDefaults.reasoning.effort（Extra Extra=High）" };
+	              const rawNorm = raw.replace(/[\s-]+/g, "_");
+	              const v =
+	                rawNorm === "extra_high"
+	                  ? "extra"
+	                  : rawNorm === "high" && uiThinkingLevel === "extra"
+	                  ? "extra"
+	                  : rawNorm === "low" || rawNorm === "medium" || rawNorm === "high"
+	                    ? rawNorm
+	                    : rawNorm
+	                      ? "custom"
+	                      : "";
+	              const hint =
+	                v === "extra"
+	                  ? "OpenAI Responses：reasoning.effort=extra_high（注意：Extra high 可能更快消耗速率/额度）"
+	                  : "OpenAI Responses：reasoning.effort=low|medium|high|extra_high";
+	              return { supported: true, value: v, hint };
 	            }
 	            if (type === "anthropic") {
 	              const thinking =
@@ -436,7 +451,7 @@
 	                else if (bt === 8192) v = "extra";
 	                else v = "custom";
 	              }
-	              return { supported: true, value: v, hint: "Anthropic：写入 requestDefaults.thinking.budget_tokens（Low/Medium/High/Extra Extra）" };
+	              return { supported: true, value: v, hint: "Anthropic：写入 requestDefaults.thinking.budget_tokens（Low/Medium/High/Extra high）" };
 	            }
 	            return { supported: false, value: "", hint: "该类型不支持（可用 Defaults JSON 自定义）" };
 	          })();
@@ -519,7 +534,7 @@
 	                          ${optionHtml({ value: "low", label: "Low", selected: thinkingUi.value === "low" })}
 	                          ${optionHtml({ value: "medium", label: "Medium", selected: thinkingUi.value === "medium" })}
 	                          ${optionHtml({ value: "high", label: "High", selected: thinkingUi.value === "high" })}
-	                          ${optionHtml({ value: "extra", label: "Extra Extra", selected: thinkingUi.value === "extra" })}
+	                          ${optionHtml({ value: "extra", label: "Extra high", selected: thinkingUi.value === "extra" })}
 	                          ${thinkingUi.value === "custom" ? optionHtml({ value: "custom", label: "(Custom / keep)", selected: true }) : ""}
 	                        </select>
 	                        <div class="text-muted text-xs">${escapeHtml(thinkingUi.hint)}</div>

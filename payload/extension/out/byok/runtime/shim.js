@@ -91,7 +91,18 @@ function providerRequestContext(provider) {
   const baseUrl = normalizeString(provider.baseUrl);
   const apiKey = resolveProviderApiKey(provider, providerLabel(provider));
   const extraHeaders = provider.headers && typeof provider.headers === "object" ? provider.headers : {};
-  const requestDefaults = provider.requestDefaults && typeof provider.requestDefaults === "object" ? provider.requestDefaults : {};
+  const requestDefaultsRaw = provider.requestDefaults && typeof provider.requestDefaults === "object" ? provider.requestDefaults : {};
+
+  const requestDefaults = (() => {
+    const rd = requestDefaultsRaw && typeof requestDefaultsRaw === "object" && !Array.isArray(requestDefaultsRaw) ? requestDefaultsRaw : {};
+    const keys = Object.keys(rd).filter((k) => k && typeof k === "string" && k.startsWith("__byok"));
+    if (!keys.length) return rd;
+    const out = { ...rd };
+    for (const k of keys) {
+      try { delete out[k]; } catch { }
+    }
+    return out;
+  })();
   if (!apiKey && Object.keys(extraHeaders).length === 0) throw new Error(`${providerLabel(provider)} 未配置 api_key（且 headers 为空）`);
   return { type, baseUrl, apiKey, extraHeaders, requestDefaults };
 }
