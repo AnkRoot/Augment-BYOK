@@ -57,12 +57,6 @@ function joinBaseUrl(baseUrl, pathname) {
   }
 }
 
-async function readTextLimit(resp, maxChars) {
-  const lim = Number.isFinite(Number(maxChars)) && Number(maxChars) > 0 ? Number(maxChars) : 300;
-  const t = await resp.text().catch(() => "");
-  return t.length > lim ? t.slice(0, lim) + "…" : t;
-}
-
 async function safeFetch(url, init, { timeoutMs, abortSignal, label } = {}) {
   if (typeof fetch !== "function") throw new Error("global fetch 不可用（需要 Node >= 18）");
   const { signal, cleanup, timedOut } = buildAbortSignal(timeoutMs, abortSignal);
@@ -78,4 +72,4 @@ async function safeFetch(url, init, { timeoutMs, abortSignal, label } = {}) {
   }
 }
 
-module.exports = { createAbortError, buildAbortSignal, joinBaseUrl, safeFetch, readTextLimit };
+module.exports = { createAbortError, buildAbortSignal, joinBaseUrl, safeFetch };

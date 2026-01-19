@@ -77,6 +77,19 @@ function safeTransform(transform, raw, label) {
   }
 }
 
+function stripByokInternalKeys(obj) {
+  const raw = obj && typeof obj === "object" && !Array.isArray(obj) ? obj : {};
+  const keys = Object.keys(raw);
+  const hasInternal = keys.some((k) => k && typeof k === "string" && k.startsWith("__byok"));
+  if (!hasInternal) return raw;
+  const out = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (k && typeof k === "string" && k.startsWith("__byok")) continue;
+    out[k] = v;
+  }
+  return out;
+}
+
 async function* emptyAsyncGenerator() {}
 
 function randomId() {
@@ -90,4 +103,14 @@ function randomId() {
   return `r_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
-module.exports = { normalizeString, requireString, normalizeEndpoint, normalizeRawToken, parseByokModelId, safeTransform, emptyAsyncGenerator, randomId };
+module.exports = {
+  normalizeString,
+  requireString,
+  normalizeEndpoint,
+  normalizeRawToken,
+  parseByokModelId,
+  safeTransform,
+  stripByokInternalKeys,
+  emptyAsyncGenerator,
+  randomId
+};

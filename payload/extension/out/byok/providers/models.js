@@ -1,8 +1,9 @@
 "use strict";
 
 const { normalizeString, requireString, normalizeRawToken } = require("../infra/util");
-const { joinBaseUrl, safeFetch, readTextLimit } = require("./http");
+const { joinBaseUrl } = require("./http");
 const { openAiAuthHeaders, anthropicAuthHeaders } = require("./headers");
+const { fetchWithRetry, makeUpstreamHttpError } = require("./request-util");
 
 function uniqKeepOrder(xs) {
   const out = [];
@@ -35,11 +36,10 @@ async function fetchModelsWithFallback({ urls, headers, timeoutMs, abortSignal, 
   const tried = [];
   for (const url of uniqKeepOrder(urls)) {
     tried.push(url);
-    const resp = await safeFetch(url, { method: "GET", headers }, { timeoutMs, abortSignal, label });
+    const resp = await fetchWithRetry(url, { method: "GET", headers }, { timeoutMs, abortSignal, label });
     if (!resp.ok) {
-      const text = await readTextLimit(resp, 300);
       if (resp.status === 404) continue;
-      throw new Error(`${label} ${resp.status}: ${text}`.trim());
+      throw await makeUpstreamHttpError(resp, { label, maxChars: 300 });
     }
     const json = await resp.json().catch(() => null);
     const models = parseModelIds(json);

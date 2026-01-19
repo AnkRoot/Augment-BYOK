@@ -1,10 +1,11 @@
 "use strict";
 
-const { joinBaseUrl, safeFetch, readTextLimit } = require("./http");
+const { joinBaseUrl } = require("./http");
 const { parseSse } = require("./sse");
-const { normalizeString, requireString, normalizeRawToken } = require("../infra/util");
+const { normalizeString, requireString, normalizeRawToken, stripByokInternalKeys } = require("../infra/util");
 const { withJsonContentType } = require("./headers");
 const { normalizeUsageInt, makeToolMetaGetter, assertSseResponse } = require("./provider-util");
+const { fetchOkWithRetry, extractErrorMessageFromJson } = require("./request-util");
 const {
   STOP_REASON_END_TURN,
   STOP_REASON_MAX_TOKENS,
@@ -51,7 +52,8 @@ function buildGeminiRequest({ baseUrl, apiKey, model, systemInstruction, content
   if (key) u.searchParams.set("key", key);
   if (stream) u.searchParams.set("alt", "sse");
 
-  const body = { ...(requestDefaults && typeof requestDefaults === "object" ? requestDefaults : null), contents: Array.isArray(contents) ? contents : [] };
+  const rd = stripByokInternalKeys(requestDefaults);
+  const body = { ...rd, contents: Array.isArray(contents) ? contents : [] };
   const sys = normalizeString(systemInstruction);
   if (sys && !body.systemInstruction) body.systemInstruction = { parts: [{ text: sys.trim() }] };
   if (Array.isArray(tools) && tools.length) {
@@ -75,17 +77,7 @@ function extractGeminiTextFromResponse(json) {
 
 async function geminiCompleteText({ baseUrl, apiKey, model, systemInstruction, contents, timeoutMs, abortSignal, extraHeaders, requestDefaults }) {
   const { url, headers, body } = buildGeminiRequest({ baseUrl, apiKey, model, systemInstruction, contents, tools: [], extraHeaders, requestDefaults, stream: false });
-  const resp = await safeFetch(
-    url,
-    {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body)
-    },
-    { timeoutMs, abortSignal, label: "Gemini" }
-  );
-
-  if (!resp.ok) throw new Error(`Gemini ${resp.status}: ${await readTextLimit(resp, 500)}`.trim());
+  const resp = await fetchOkWithRetry(url, { method: "POST", headers, body: JSON.stringify(body) }, { timeoutMs, abortSignal, label: "Gemini" });
   const json = await resp.json().catch(() => null);
   const text = extractGeminiTextFromResponse(json);
   if (!text) throw new Error("Gemini 响应缺少 candidates[0].content.parts[].text");
@@ -94,17 +86,7 @@ async function geminiCompleteText({ baseUrl, apiKey, model, systemInstruction, c
 
 async function* geminiStreamTextDeltas({ baseUrl, apiKey, model, systemInstruction, contents, timeoutMs, abortSignal, extraHeaders, requestDefaults }) {
   const { url, headers, body } = buildGeminiRequest({ baseUrl, apiKey, model, systemInstruction, contents, tools: [], extraHeaders, requestDefaults, stream: true });
-  const resp = await safeFetch(
-    url,
-    {
-      method: "POST",
-      headers,
-      body: JSON.stringify(body)
-    },
-    { timeoutMs, abortSignal, label: "Gemini(stream)" }
-  );
-
-  if (!resp.ok) throw new Error(`Gemini(stream) ${resp.status}: ${await readTextLimit(resp, 500)}`.trim());
+  const resp = await fetchOkWithRetry(url, { method: "POST", headers, body: JSON.stringify(body) }, { timeoutMs, abortSignal, label: "Gemini(stream)" });
   await assertSseResponse(resp, { label: "Gemini(stream)", expectedHint: "请确认 baseUrl 指向 Google Generative Language API" });
 
   let dataEvents = 0;
@@ -124,6 +106,10 @@ async function* geminiStreamTextDeltas({ baseUrl, apiKey, model, systemInstructi
       continue;
     }
     parsedChunks += 1;
+    if (json && typeof json === "object" && json.error) {
+      const msg = normalizeString(extractErrorMessageFromJson(json)) || "upstream error";
+      throw new Error(`Gemini(stream) upstream error: ${msg}`.trim());
+    }
     const chunk = extractGeminiTextFromResponse(json);
     if (!chunk) continue;
 
@@ -164,9 +150,7 @@ async function* geminiChatStreamChunks({ baseUrl, apiKey, model, systemInstructi
   const getToolMeta = makeToolMetaGetter(toolMetaByName);
 
   const { url, headers, body } = buildGeminiRequest({ baseUrl, apiKey, model, systemInstruction, contents, tools, extraHeaders, requestDefaults, stream: true });
-  const resp = await safeFetch(url, { method: "POST", headers, body: JSON.stringify(body) }, { timeoutMs, abortSignal, label: "Gemini(chat-stream)" });
-
-  if (!resp.ok) throw new Error(`Gemini(chat-stream) ${resp.status}: ${await readTextLimit(resp, 500)}`.trim());
+  const resp = await fetchOkWithRetry(url, { method: "POST", headers, body: JSON.stringify(body) }, { timeoutMs, abortSignal, label: "Gemini(chat-stream)" });
   await assertSseResponse(resp, { label: "Gemini(chat-stream)", expectedHint: "请确认 baseUrl 指向 Gemini /streamGenerateContent SSE" });
 
   let nodeId = 0;
@@ -195,10 +179,9 @@ async function* geminiChatStreamChunks({ baseUrl, apiKey, model, systemInstructi
     }
     parsedChunks += 1;
 
-    const errMsg = normalizeString(json?.error?.message) || normalizeString(json?.message);
-    if (errMsg) {
-      yield makeBackChatChunk({ text: `❌ 上游返回 error: ${errMsg}`.trim(), stop_reason: STOP_REASON_END_TURN });
-      return;
+    if (json && typeof json === "object" && (json.error || json.message)) {
+      const msg = normalizeString(extractErrorMessageFromJson(json)) || "upstream error";
+      throw new Error(`Gemini(chat-stream) upstream error: ${msg}`.trim());
     }
 
     const um = json?.usageMetadata && typeof json.usageMetadata === "object" ? json.usageMetadata : json?.usage_metadata && typeof json.usage_metadata === "object" ? json.usage_metadata : null;

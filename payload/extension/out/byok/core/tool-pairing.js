@@ -1,20 +1,14 @@
 "use strict";
 
 const { normalizeString } = require("../infra/util");
+const { truncateText } = require("../infra/text");
+const { normalizeAnthropicBlocks, buildOrphanAnthropicToolResultAsTextBlock } = require("./anthropic-blocks");
 
 const TOOL_RESULT_MISSING_MESSAGE =
   "未收到对应的 tool_result（可能是工具未执行/被禁用/权限不足/或历史中丢失）。请在缺失结果的前提下继续推理或改为不依赖该工具。";
 
 function normalizeRole(v) {
   return normalizeString(v).toLowerCase();
-}
-
-function truncateText(s, maxLen) {
-  const raw = typeof s === "string" ? s : String(s ?? "");
-  const n = Number(maxLen);
-  if (!Number.isFinite(n) || n <= 0) return raw;
-  if (raw.length <= n) return raw;
-  return raw.slice(0, n) + "…";
 }
 
 function normalizeToolCall(tc) {
@@ -293,12 +287,6 @@ function repairOpenAiResponsesToolCallPairs(inputItems, opts) {
   return { input: out, report };
 }
 
-function normalizeAnthropicBlocks(content) {
-  if (Array.isArray(content)) return content.filter((b) => b && typeof b === "object");
-  if (typeof content === "string" && content) return [{ type: "text", text: content }];
-  return [];
-}
-
 function buildMissingAnthropicToolResultBlock({ toolUseId, toolName, input } = {}) {
   const payload = {
     error: "tool_result_missing",
@@ -314,26 +302,6 @@ function buildMissingAnthropicToolResultBlock({ toolUseId, toolName, input } = {
     content = String(payload.message || "tool_result_missing");
   }
   return { type: "tool_result", tool_use_id: String(toolUseId || ""), content, is_error: true };
-}
-
-function stringifyAnthropicToolResultContent(content) {
-  if (typeof content === "string") return content;
-  const blocks = Array.isArray(content) ? content : [];
-  const parts = [];
-  for (const b of blocks) {
-    if (!b || typeof b !== "object") continue;
-    if (b.type === "text" && typeof b.text === "string") parts.push(b.text);
-    else parts.push(`[${normalizeString(b.type) || "content"} omitted]`);
-  }
-  return parts.join("");
-}
-
-function buildOrphanAnthropicToolResultAsTextBlock(block, opts) {
-  const maxLen = Number.isFinite(Number(opts?.maxOrphanContentLen)) ? Number(opts.maxOrphanContentLen) : 8000;
-  const id = normalizeString(block?.tool_use_id);
-  const content = truncateText(stringifyAnthropicToolResultContent(block?.content), maxLen).trim();
-  const header = id ? `[orphan_tool_result tool_use_id=${id}]` : "[orphan_tool_result]";
-  return { type: "text", text: content ? `${header}\n${content}` : header };
 }
 
 function repairAnthropicToolUsePairs(messages, opts) {

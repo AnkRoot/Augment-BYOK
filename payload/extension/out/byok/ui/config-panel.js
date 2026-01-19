@@ -7,7 +7,8 @@ const { setRuntimeEnabled: setRuntimeEnabledPersisted } = require("../config/sta
 const { clearHistorySummaryCacheAll } = require("../core/augment-history-summary-auto");
 const { runSelfTest } = require("../core/self-test");
 const { fetchProviderModels } = require("../providers/models");
-const { joinBaseUrl, safeFetch, readTextLimit } = require("../providers/http");
+const { joinBaseUrl, safeFetch } = require("../providers/http");
+const { readHttpErrorDetail } = require("../providers/request-util");
 const { renderConfigPanelHtml } = require("./config-panel.html");
 
 const DEFAULT_UPSTREAM_TIMEOUT_MS = 120000;
@@ -169,7 +170,7 @@ function createHandlers({ vscode, ctx, cfgMgr, state, panel }) {
       try {
         const startedAtMs = Date.now();
         const resp = await safeFetch(url, { method: "POST", headers, body: "{}" }, { timeoutMs: 12000, label: "official/get-models" });
-        if (!resp.ok) throw new Error(`get-models ${resp.status}: ${await readTextLimit(resp, 300)}`.trim());
+        if (!resp.ok) throw new Error(`get-models ${resp.status}: ${await readHttpErrorDetail(resp, { maxChars: 300 })}`.trim());
         const json = await resp.json().catch(() => null);
         if (!json || typeof json !== "object") throw new Error("get-models 响应不是 JSON 对象");
 
