@@ -311,7 +311,7 @@ async function* anthropicClaudeCodeChatStreamChunks({ baseUrl, apiKey, model, sy
         toolBlocks[index] = {
           id: normalizeString(block?.id ?? block?.tool_use_id ?? block?.toolUseId),
           name: normalizeString(block?.name ?? block?.tool_name ?? block?.toolName),
-          input_json: normalizeToolInputJson(block?.input_json ?? block?.input)
+          input_json: ""
         };
       } else if (currentBlockType === "thinking") {
         thinkingBuf = "";
