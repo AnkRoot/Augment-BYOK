@@ -21,7 +21,7 @@ const {
   makeBackChatChunk
 } = require("../core/augment-protocol");
 
-const CLAUDE_CLI_VERSION = "2.1.12";
+const CLAUDE_CLI_VERSION = "2.1.2";
 const CLAUDE_USER_ID_KEY = "augment-byok.claudeCodeUserId.v1";
 // 生成进程级别的 session_id（每次启动生成一次）
 const SESSION_ID = crypto.randomBytes(16).toString("hex");
@@ -66,8 +66,8 @@ function pickMaxTokens(requestDefaults) {
 
 function getClaudeCliUserAgent() {
   const entrypoint = process.env.CLAUDE_CODE_ENTRYPOINT || "claude-vscode";
-  const agentSdk = process.env.CLAUDE_AGENT_SDK_VERSION ? `, agent-sdk/${process.env.CLAUDE_AGENT_SDK_VERSION}` : "";
-  return `claude-cli/${CLAUDE_CLI_VERSION} (external, ${entrypoint}${agentSdk})`;
+  const sdkVersion = process.env.CLAUDE_AGENT_SDK_VERSION || "0.2.11";
+  return `claude-cli/${CLAUDE_CLI_VERSION} (external, ${entrypoint}, agent-sdk/${sdkVersion})`;
 }
 
 function normalizeBetaList(list) {
@@ -87,16 +87,10 @@ function normalizeBetaList(list) {
 }
 
 function buildClaudeCodeBetas({ model, tools, requestDefaults, extraHeaders }) {
-  const betas = [];
+  const betas = ["claude-code-20250219", "interleaved-thinking-2025-05-14"];
   const add = (v) => {
     if (v && !betas.includes(v)) betas.push(v);
   };
-  const modelName = typeof model === "string" ? model : "";
-  const isHaiku = /haiku/i.test(modelName);
-
-  add("claude-code-20250219");
-  if (!isHaiku) add("interleaved-thinking-2025-05-14");
-  if (!isHaiku) add("context-1m-2025-08-07");
 
   const rd = requestDefaults && typeof requestDefaults === "object" ? requestDefaults : null;
   if (rd?.context_management || rd?.contextManagement) add("context-management-2025-06-27");
@@ -125,19 +119,18 @@ function normalizeCliHeaderMode(requestDefaults) {
 
 function claudeCodeHeaders(key, extraHeaders, betas, dangerouslyAllowBrowser, headerMode) {
   const baseHeaders = {
-    "anthropic-beta": Array.isArray(betas) && betas.length ? betas.join(",") : "claude-code-20250219"
+    "anthropic-beta": Array.isArray(betas) && betas.length ? betas.join(",") : "interleaved-thinking-2025-05-14"
   };
   const cliHeaders = headerMode === "strict" ? {
     "x-app": "cli",
     "user-agent": getClaudeCliUserAgent(),
     "x-stainless-arch": process.arch || "arm64",
-    "x-stainless-helper-method": "stream",
     "x-stainless-lang": "js",
     "x-stainless-os": process.platform === "darwin" ? "MacOS" : process.platform === "win32" ? "Windows" : "Linux",
     "x-stainless-package-version": "0.70.0",
     "x-stainless-retry-count": "0",
     "x-stainless-runtime": "node",
-    "x-stainless-runtime-version": process.version.replace(/^v/, ""),
+    "x-stainless-runtime-version": process.version,
     "x-stainless-timeout": "600",
     "connection": "keep-alive",
     "accept-encoding": "gzip, deflate, br, zstd"
@@ -159,8 +152,7 @@ function buildClaudeCodeRequest({ baseUrl, apiKey, model, system, messages, tool
   const cliSystem = [
     {
       type: "text",
-      text: "You are Claude Code, Anthropic's official CLI for Claude, running within the Claude Agent SDK.",
-      cache_control: { type: "ephemeral" }
+      text: "You are Claude Code, Anthropic's official CLI for Claude."
     }
   ];
   if (system) {
@@ -216,7 +208,7 @@ function buildClaudeCodeRequest({ baseUrl, apiKey, model, system, messages, tool
   const dangerouslyAllowBrowser = Boolean(requestDefaults?.dangerouslyAllowBrowser ?? requestDefaults?.dangerously_allow_browser ?? requestDefaults?.dangerous_direct_browser_access);
   const headerMode = normalizeCliHeaderMode(requestDefaults);
   const headers = withJsonContentType(claudeCodeHeaders(key, extraHeaders, betas, dangerouslyAllowBrowser, headerMode));
-  if (stream) headers.accept = "text/event-stream";
+  if (stream) headers.accept = "application/json";
   return { url, headers, body };
 }
 

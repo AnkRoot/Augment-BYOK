@@ -23,9 +23,8 @@
   "anthropic-dangerous-direct-browser-access": "true", // 可选，仅在启用相关模式时
   "x-api-key": "your-api-key",
   "x-app": "cli",
-  "user-agent": "claude-cli/2.1.12 (external, claude-vscode)",
+  "user-agent": "claude-cli/2.1.12 (external, claude-vscode, agent-sdk/0.2.11)",
   "x-stainless-arch": "arm64",
-  "x-stainless-helper-method": "stream",
   "x-stainless-lang": "js",
   "x-stainless-os": "MacOS",
   "x-stainless-package-version": "0.70.0",
@@ -40,12 +39,14 @@
 ```
 
 **关键差异：**
-- CLI 包含 `anthropic-beta` 头，且为**动态拼接**（基础 + 模型/功能附加）
+- CLI 包含 `anthropic-beta` 头，且为**动态拼接**（**必须以 `claude-code-20250219` 开头** + 模型/功能附加）
 - CLI **可能**包含 `anthropic-dangerous-direct-browser-access` 头（仅在启用相关模式时）
 - CLI 包含多个 `x-stainless-*` 头（由 SDK 注入，版本/运行时可能变化）
 - CLI 包含 `x-app: cli` 标识
-- CLI 的 `x-stainless-runtime-version` 移除了 'v' 前缀（如 `20.0.0` 而非 `v20.0.0`）
+- CLI 的 `x-stainless-runtime-version` **保留** 'v' 前缀（如 `v24.3.0`）
+- CLI 的 `user-agent` 必须包含 `agent-sdk` 版本（如 `agent-sdk/0.2.11`）
 - CLI 包含 `connection: keep-alive` 和 `accept-encoding: gzip, deflate, br, zstd`
+- **注意**：`x-stainless-helper-method` 已从实现中移除（非必需）
 
 ### Header 模拟模式（本项目）
 - `requestDefaults.cliHeadersMode = "strict" | "minimal"`
@@ -234,12 +235,18 @@ if (body.tools.length) {
 - 需要 Claude Code 特定的 beta 功能（如 `interleaved-thinking`）
 - 需要与官方 CLI 完全一致的请求格式
 
-## 10. 注意事项
+## 11. 注意事项
 
 1. **稳定 ID**：CLI 使用本地持久化随机 ID 生成 `user_id`，跨会话保持稳定
 2. **Session ID**：进程级随机十六进制字符串确保同一进程内的所有请求使用相同的 session ID
-3. **Beta 功能**：CLI 会动态追加 `anthropic-beta` 列表（基础 + 功能/模型相关）
+3. **Beta 功能**：CLI 会动态追加 `anthropic-beta` 列表，**但必须始终以 `claude-code-20250219` 开头**（这是 CLI 识别的关键标识）
 4. **字段顺序**：某些代理服务器可能对字段顺序敏感，CLI 实现确保正确的顺序
 5. **Tools 字段**：CLI 总是包含 `tools` 字段（即使为空）
 6. **Cache Control**：System prompt 的第一个 block 包含 `cache_control: { type: "ephemeral" }` 以优化缓存
 7. **危险头**：`anthropic-dangerous-direct-browser-access` 仅在显式启用相关模式时才会出现
+8. **关键修复**（2026-01-20）：
+   - `buildClaudeCodeBetas()` 现在确保 `claude-code-20250219` 始终是第一个 beta（使用数组初始化而非 `add()` 添加）
+   - 移除了非必需的 `x-stainless-helper-method` header
+   - System prompt 已正确包含 "running within the Claude Agent SDK" 完整描述
+   - `x-stainless-runtime-version` 保留 'v' 前缀（不移除）
+   - `user-agent` 必须包含 `agent-sdk` 版本信息
