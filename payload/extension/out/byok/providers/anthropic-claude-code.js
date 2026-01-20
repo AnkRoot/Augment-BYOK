@@ -6,6 +6,7 @@ const { parseSse } = require("./sse");
 const { normalizeString, requireString, normalizeRawToken } = require("../infra/util");
 const { withJsonContentType } = require("./headers");
 const { normalizeUsageInt, makeToolMetaGetter, assertSseResponse } = require("./provider-util");
+const { info } = require("../infra/log");
 const { state } = require("../config/state");
 const {
   STOP_REASON_END_TURN,
@@ -45,6 +46,16 @@ function normalizeAccountUuid(requestDefaults) {
   const md = requestDefaults && typeof requestDefaults === "object" ? requestDefaults.metadata : null;
   const raw = md?.account_uuid ?? md?.accountUuid ?? requestDefaults?.accountUuid ?? requestDefaults?.account_uuid;
   return typeof raw === "string" ? raw.trim() : "";
+}
+
+function normalizeToolInputJson(value) {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") {
+    try {
+      return JSON.stringify(value);
+    } catch {}
+  }
+  return "";
 }
 
 function pickMaxTokens(requestDefaults) {
@@ -106,9 +117,17 @@ function buildClaudeCodeBetas({ model, tools, requestDefaults, extraHeaders }) {
   return betas;
 }
 
-function claudeCodeHeaders(key, extraHeaders, betas, dangerouslyAllowBrowser) {
-  const cliHeaders = {
-    "anthropic-beta": Array.isArray(betas) && betas.length ? betas.join(",") : "claude-code-20250219",
+function normalizeCliHeaderMode(requestDefaults) {
+  const raw = requestDefaults?.cliHeadersMode ?? requestDefaults?.cli_headers_mode;
+  const mode = normalizeString(raw);
+  return mode === "minimal" ? "minimal" : "strict";
+}
+
+function claudeCodeHeaders(key, extraHeaders, betas, dangerouslyAllowBrowser, headerMode) {
+  const baseHeaders = {
+    "anthropic-beta": Array.isArray(betas) && betas.length ? betas.join(",") : "claude-code-20250219"
+  };
+  const cliHeaders = headerMode === "strict" ? {
     "x-app": "cli",
     "user-agent": getClaudeCliUserAgent(),
     "x-stainless-arch": process.arch || "arm64",
@@ -122,10 +141,10 @@ function claudeCodeHeaders(key, extraHeaders, betas, dangerouslyAllowBrowser) {
     "x-stainless-timeout": "600",
     "connection": "keep-alive",
     "accept-encoding": "gzip, deflate, br, zstd"
-  };
+  } : {};
   if (dangerouslyAllowBrowser) cliHeaders["anthropic-dangerous-direct-browser-access"] = "true";
   const extra = extraHeaders && typeof extraHeaders === "object" ? extraHeaders : {};
-  return { ...cliHeaders, ...(key ? { "x-api-key": key } : {}), ...extra, "anthropic-version": "2023-06-01" };
+  return { ...baseHeaders, ...cliHeaders, ...(key ? { "x-api-key": key } : {}), ...extra, "anthropic-version": "2023-06-01" };
 }
 
 function buildClaudeCodeRequest({ baseUrl, apiKey, model, system, messages, tools, extraHeaders, requestDefaults, stream }) {
@@ -195,7 +214,8 @@ function buildClaudeCodeRequest({ baseUrl, apiKey, model, system, messages, tool
 
   const betas = buildClaudeCodeBetas({ model: m, tools: toolsArray, requestDefaults, extraHeaders });
   const dangerouslyAllowBrowser = Boolean(requestDefaults?.dangerouslyAllowBrowser ?? requestDefaults?.dangerously_allow_browser ?? requestDefaults?.dangerous_direct_browser_access);
-  const headers = withJsonContentType(claudeCodeHeaders(key, extraHeaders, betas, dangerouslyAllowBrowser));
+  const headerMode = normalizeCliHeaderMode(requestDefaults);
+  const headers = withJsonContentType(claudeCodeHeaders(key, extraHeaders, betas, dangerouslyAllowBrowser, headerMode));
   if (stream) headers.accept = "text/event-stream";
   return { url, headers, body };
 }
@@ -289,9 +309,9 @@ async function* anthropicClaudeCodeChatStreamChunks({ baseUrl, apiKey, model, sy
       currentBlockType = normalizeString(block?.type);
       if ((currentBlockType === "tool_use" || currentBlockType === "server_tool_use" || currentBlockType === "mcp_tool_use") && index >= 0) {
         toolBlocks[index] = {
-          id: normalizeString(block?.id),
-          name: normalizeString(block?.name),
-          input_json: ""
+          id: normalizeString(block?.id ?? block?.tool_use_id ?? block?.toolUseId),
+          name: normalizeString(block?.name ?? block?.tool_name ?? block?.toolName),
+          input_json: normalizeToolInputJson(block?.input_json ?? block?.input)
         };
       } else if (currentBlockType === "thinking") {
         thinkingBuf = "";
@@ -326,6 +346,28 @@ async function* anthropicClaudeCodeChatStreamChunks({ baseUrl, apiKey, model, sy
           yield makeBackChatChunk({ text: "", nodes: [thinkingNode({ id: nodeId, summary })] });
         }
         thinkingBuf = "";
+      } else if (currentBlockType === "tool_use" || currentBlockType === "server_tool_use" || currentBlockType === "mcp_tool_use") {
+        const index = typeof json?.index === "number" ? json.index : -1;
+        const block = index >= 0 ? toolBlocks[index] : null;
+        if (block) {
+          const name = normalizeString(block.name);
+          if (name) {
+            let id = normalizeString(block.id);
+            if (!id) id = `tool-${nodeId + 1}`;
+            const inputJson = normalizeString(block.input_json) || "{}";
+            const meta = getToolMeta(name);
+            sawToolUse = true;
+            if (supportToolUseStart === true) {
+              nodeId += 1;
+              emittedChunks += 1;
+              yield makeBackChatChunk({ text: "", nodes: [toolUseStartNode({ id: nodeId, toolUseId: id, toolName: name, inputJson, mcpServerName: meta.mcpServerName, mcpToolName: meta.mcpToolName })] });
+            }
+            nodeId += 1;
+            emittedChunks += 1;
+            yield makeBackChatChunk({ text: "", nodes: [toolUseNode({ id: nodeId, toolUseId: id, toolName: name, inputJson, mcpServerName: meta.mcpServerName, mcpToolName: meta.mcpToolName })] });
+          }
+          delete toolBlocks[index];
+        }
       }
       currentBlockType = "";
       continue;
@@ -337,7 +379,7 @@ async function* anthropicClaudeCodeChatStreamChunks({ baseUrl, apiKey, model, sy
       if (sr) {
         stopReasonSeen = true;
         stopReason = mapAnthropicStopReasonToAugment(sr);
-        if (sr === "tool_use") {
+        if (sr === "tool_use" || sr === "server_tool_use" || sr === "mcp_tool_use") {
           const sortedIndexes = Object.keys(toolBlocks).map(Number).sort((a, b) => a - b);
           for (const index of sortedIndexes) {
             const block = toolBlocks[index];

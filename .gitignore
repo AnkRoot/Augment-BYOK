@@ -3,3 +3,4 @@ dist/
 tmp/
 node_modules/
 config.yaml
+.cunzhi-memory

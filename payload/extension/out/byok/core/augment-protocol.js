@@ -47,7 +47,7 @@ function mapAnthropicStopReasonToAugment(reason) {
   const r = typeof reason === "string" ? reason.trim().toLowerCase() : "";
   if (r === "end_turn") return STOP_REASON_END_TURN;
   if (r === "max_tokens") return STOP_REASON_MAX_TOKENS;
-  if (r === "tool_use") return STOP_REASON_TOOL_USE_REQUESTED;
+  if (r === "tool_use" || r === "server_tool_use" || r === "mcp_tool_use") return STOP_REASON_TOOL_USE_REQUESTED;
   if (r === "stop_sequence") return STOP_REASON_END_TURN;
   if (r === "safety") return STOP_REASON_SAFETY;
   if (r === "recitation") return STOP_REASON_RECITATION;

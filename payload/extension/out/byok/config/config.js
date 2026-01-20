@@ -85,7 +85,7 @@ function defaultConfig() {
         models: ["claude-sonnet-4-5-20250929"],
         defaultModel: "claude-sonnet-4-5-20250929",
         headers: {},
-        requestDefaults: {}
+        requestDefaults: { cliHeadersMode: "strict", debugStream: true }
       }
     ],
     routing: {

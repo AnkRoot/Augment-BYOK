@@ -10,6 +10,7 @@ const { fetchProviderModels } = require("../providers/models");
 const { openAiCompleteText, openAiStreamTextDeltas, openAiChatStreamChunks } = require("../providers/openai");
 const { openAiResponsesCompleteText, openAiResponsesStreamTextDeltas, openAiResponsesChatStreamChunks } = require("../providers/openai-responses");
 const { anthropicCompleteText, anthropicStreamTextDeltas, anthropicChatStreamChunks } = require("../providers/anthropic");
+const { anthropicClaudeCodeCompleteText, anthropicClaudeCodeStreamTextDeltas, anthropicClaudeCodeChatStreamChunks } = require("../providers/anthropic-claude-code");
 const { geminiCompleteText, geminiStreamTextDeltas, geminiChatStreamChunks } = require("../providers/gemini");
 const { buildMessagesForEndpoint } = require("./protocol");
 const {
@@ -564,6 +565,10 @@ async function completeTextByProvider({ provider, model, system, messages, timeo
     const { system: sys, messages: ms } = buildAnthropicBlocks(system, messages);
     return await anthropicCompleteText({ baseUrl, apiKey, model, system: sys, messages: ms, timeoutMs, abortSignal, extraHeaders, requestDefaults });
   }
+  if (type === "anthropic_claude_code") {
+    const { system: sys, messages: ms } = buildAnthropicBlocks(system, messages);
+    return await anthropicClaudeCodeCompleteText({ baseUrl, apiKey, model, system: sys, messages: ms, timeoutMs, abortSignal, extraHeaders, requestDefaults });
+  }
   if (type === "openai_responses") {
     const { instructions, input } = buildResponsesTextInput(system, messages);
     return await openAiResponsesCompleteText({ baseUrl, apiKey, model, instructions, input, timeoutMs, abortSignal, extraHeaders, requestDefaults });
@@ -597,6 +602,14 @@ async function streamTextByProvider({ provider, model, system, messages, timeout
     }
     return out;
   }
+  if (type === "anthropic_claude_code") {
+    let out = "";
+    const { system: sys, messages: ms } = buildAnthropicBlocks(system, messages);
+    for await (const d of anthropicClaudeCodeStreamTextDeltas({ baseUrl, apiKey, model, system: sys, messages: ms, timeoutMs, abortSignal, extraHeaders, requestDefaults })) {
+      if (typeof d === "string") out += d;
+    }
+    return out;
+  }
   if (type === "openai_responses") {
     let out = "";
     const { instructions, input } = buildResponsesTextInput(system, messages);
@@ -620,6 +633,7 @@ function convertToolsByProviderType(providerType, toolDefs) {
   const t = normalizeString(providerType);
   if (t === "openai_compatible") return convertOpenAiTools(toolDefs);
   if (t === "anthropic") return convertAnthropicTools(toolDefs);
+  if (t === "anthropic_claude_code") return convertAnthropicTools(toolDefs);
   if (t === "gemini_ai_studio") return convertGeminiTools(toolDefs);
   if (t === "openai_responses") return convertOpenAiResponsesTools(toolDefs);
   throw new Error(`未知 provider.type: ${t}`);
@@ -672,6 +686,24 @@ async function chatStreamByProvider({ provider, model, req, timeoutMs, abortSign
   if (type === "anthropic") {
     return await collectChatStream(
       anthropicChatStreamChunks({
+        baseUrl,
+        apiKey,
+        model,
+        system: buildSystemPrompt(req),
+        messages: buildAnthropicMessages(req),
+        tools: convertAnthropicTools(req.tool_definitions),
+        timeoutMs,
+        abortSignal,
+        extraHeaders,
+        requestDefaults,
+        toolMetaByName,
+        supportToolUseStart: true
+      })
+    );
+  }
+  if (type === "anthropic_claude_code") {
+    return await collectChatStream(
+      anthropicClaudeCodeChatStreamChunks({
         baseUrl,
         apiKey,
         model,

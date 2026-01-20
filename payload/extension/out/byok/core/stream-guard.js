@@ -17,7 +17,10 @@ function makeEndpointErrorText(ep, err) {
 
 async function* guardObjectStream({ ep, src, transform, makeErrorChunk }) {
   try {
-    for await (const raw of src) yield safeTransform(transform, raw, ep);
+    for await (const raw of src) {
+      const transformed = safeTransform(transform, raw, ep);
+      yield transformed;
+    }
   } catch (err) {
     if (isTransformFailure(err)) throw err;
     warn(makeEndpointErrorText(ep, err));

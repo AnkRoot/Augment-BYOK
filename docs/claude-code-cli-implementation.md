@@ -47,6 +47,12 @@
 - CLI 的 `x-stainless-runtime-version` 移除了 'v' 前缀（如 `20.0.0` 而非 `v20.0.0`）
 - CLI 包含 `connection: keep-alive` 和 `accept-encoding: gzip, deflate, br, zstd`
 
+### Header 模拟模式（本项目）
+- `requestDefaults.cliHeadersMode = "strict" | "minimal"`
+- 默认是 `"strict"`（即使本地项目未配置）
+- `"strict"`：发送 CLI + SDK 相关头（`x-app`/`x-stainless-*`/`user-agent` 等）
+- `"minimal"`：只发送必要头（`anthropic-version`/`anthropic-beta`/鉴权/`content-type`/`accept`）
+
 ## 2. URL 差异
 
 ### 标准 Anthropic API
@@ -179,7 +185,17 @@ if (body.tools.length) {
 - CLI 将 `tool_choice` 放在最后（如果存在）
 - CLI 总是包含 `tools` 字段（即使为空）
 
-## 7. 实现代码位置
+## 7. SSE 响应差异
+
+### Claude Code CLI
+- `content_block` 可能返回 `tool_use` / `server_tool_use` / `mcp_tool_use`
+- `message_delta.stop_reason` 可能返回 `tool_use` / `server_tool_use` / `mcp_tool_use`
+- `input_json_delta` 使用 `partial_json` 片段，需要拼接成完整 JSON 作为 tool input
+
+**关键差异：**
+- CLI 的工具调用可能使用 `server_tool_use` / `mcp_tool_use`，需要与 `tool_use` 同等处理
+
+## 8. 实现代码位置
 
 ### 标准 Anthropic API
 - 文件：`payload/extension/out/byok/providers/anthropic.js`
@@ -189,7 +205,7 @@ if (body.tools.length) {
 - 文件：`payload/extension/out/byok/providers/anthropic-claude-code.js`
 - 函数：`anthropicClaudeCodeCompleteText`, `anthropicClaudeCodeStreamTextDeltas`, `anthropicClaudeCodeChatStreamChunks`
 
-## 8. 配置示例
+## 9. 配置示例
 
 ### config.json 配置
 ```json
@@ -201,11 +217,11 @@ if (body.tools.length) {
   "models": ["claude-sonnet-4-5-20250929"],
   "defaultModel": "claude-sonnet-4-5-20250929",
   "headers": {},
-  "requestDefaults": { "max_tokens": 8192 }
+  "requestDefaults": { "max_tokens": 8192, "cliHeadersMode": "strict" }
 }
 ```
 
-## 9. 使用场景
+## 10. 使用场景
 
 ### 何时使用标准 Anthropic API
 - 标准的 Claude API 调用
