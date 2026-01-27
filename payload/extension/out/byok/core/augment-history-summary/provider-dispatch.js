@@ -28,6 +28,9 @@ function normalizeProviderRequestDefaults(provider, maxTokens) {
     }
   }
   if (out.thinking) delete out.thinking;
+  if (out.reasoning) delete out.reasoning;
+  if (out.reasoning_effort) delete out.reasoning_effort;
+  if (out.reasoningEffort) delete out.reasoningEffort;
   if (out.tools) delete out.tools;
   if (out.tool_choice) delete out.tool_choice;
   if (out.toolChoice) delete out.toolChoice;
@@ -78,4 +81,4 @@ async function runSummaryModelOnce({ provider, model, prompt, chatHistory, maxTo
   });
 }
 
-module.exports = { runSummaryModelOnce };
+module.exports = { normalizeProviderRequestDefaults, runSummaryModelOnce };

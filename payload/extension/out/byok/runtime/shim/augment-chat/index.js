@@ -6,6 +6,7 @@ const { captureAugmentToolDefinitions } = require("../../../config/state");
 const { resolveExtraSystemPrompt } = require("../../../config/prompts");
 const { maybeSummarizeAndCompactAugmentChatRequest } = require("../../../core/augment-history-summary/auto");
 const { normalizeAugmentChatRequest } = require("../../../core/augment-chat");
+const { shouldRequestThinking, stripThinkingAndReasoningFromRequestDefaults } = require("../../../core/thinking-control");
 const { maybeInjectOfficialCodebaseRetrieval } = require("../../official/codebase-retrieval");
 const { maybeInjectOfficialContextCanvas } = require("../../official/context-canvas");
 const { maybeInjectOfficialExternalSources } = require("../../official/external-sources");
@@ -112,12 +113,19 @@ async function buildByokAugmentChatContext({ kind, endpoint, cfg, provider, mode
   const label = normalizeString(kind) === "chat-stream" ? "chat-stream" : "chat";
   const ep = normalizeString(endpoint) || (label === "chat-stream" ? "/chat-stream" : "/chat");
 
-  const { type, baseUrl, apiKey, extraHeaders, requestDefaults } = providerRequestContext(provider);
+  const prc = providerRequestContext(provider);
+  const { type, baseUrl, apiKey, extraHeaders } = prc;
+  let requestDefaults = prc.requestDefaults;
   const req = normalizeAugmentChatRequest(body);
   const byokExtraSystem = resolveExtraSystemPrompt(cfg, ep);
   if (byokExtraSystem) req.byok_system_prompt = byokExtraSystem;
   const conversationId = normalizeString(req?.conversation_id ?? req?.conversationId ?? req?.conversationID);
   const rid = normalizeString(requestId);
+
+  // 非用户对话轮次（例如工具回填后的 continuation）不需要上游“thinking/reasoning”，避免多次思考导致开销/中断。
+  if (!shouldRequestThinking(req)) {
+    requestDefaults = stripThinkingAndReasoningFromRequestDefaults(requestDefaults);
+  }
 
   captureAugmentChatToolDefinitions({
     endpoint: ep,
