@@ -63,15 +63,19 @@ async function selfTestToolsModelExec({ toolDefinitions, timeoutMs, abortSignal,
     results.set(name, { ok: nextOk, detail: normalizeString(detail) || "" });
   };
 
-  // 部分工具走 Augment Agents API（/agents/* 或 /relay/agents/*），在 BYOK/代理环境未实现 Agents 路由时会稳定失败。
-  // 规则：Agents 路由相关工具允许失败；其余工具必须严格通过。
-  const OPTIONAL_AGENTS_TOOL_NAMES = new Set(["web-search"]);
+  // 部分工具在某些环境中会“稳定失败”但不应判定为 BYOK 协议问题：
+  // - Agents API（/agents/* 或 /relay/agents/*）相关工具：在 completion_url 未实现 Agents 路由时会失败（例如 web-search）。
+  // - open-browser：在无 GUI / 宿主策略禁止打开浏览器时会失败。
+  // 规则：这些工具允许失败；其余工具必须严格通过。
+  const OPTIONAL_TOOL_NAMES = new Set(["web-search", "open-browser"]);
 
   const isAgentsRoutedFailure = (detail) => {
     const s = normalizeString(detail).toLowerCase();
     if (!s) return false;
     // run-remote-tool 是 remoteToolHost 的执行入口；codebase-retrieval 也属于 agents tools。
     return (
+      s.includes("augment agents") ||
+      s.includes("/agents/*") ||
       s.includes("agents/run-remote-tool") ||
       s.includes("agents/codebase-retrieval") ||
       s.includes("agents/list-remote-tools") ||
@@ -81,10 +85,10 @@ async function selfTestToolsModelExec({ toolDefinitions, timeoutMs, abortSignal,
     );
   };
 
-  const isOptionalAgentsToolFailure = (toolName, detail) => {
+  const isOptionalToolFailure = (toolName, detail) => {
     const name = normalizeString(toolName);
     if (!name) return false;
-    if (OPTIONAL_AGENTS_TOOL_NAMES.has(name)) return true;
+    if (OPTIONAL_TOOL_NAMES.has(name)) return true;
     return isAgentsRoutedFailure(detail);
   };
 
@@ -118,8 +122,8 @@ async function selfTestToolsModelExec({ toolDefinitions, timeoutMs, abortSignal,
   for (const n of missing) results.set(n, { ok: false, detail: "not executed" });
 
   const failed = Array.from(results.entries()).filter(([, v]) => v && v.ok === false);
-  const failedOptional = failed.filter(([name, v]) => isOptionalAgentsToolFailure(name, v?.detail));
-  const failedRequired = failed.filter(([name, v]) => !isOptionalAgentsToolFailure(name, v?.detail));
+  const failedOptional = failed.filter(([name, v]) => isOptionalToolFailure(name, v?.detail));
+  const failedRequired = failed.filter(([name, v]) => !isOptionalToolFailure(name, v?.detail));
   const failedNames = failedRequired.map(([name]) => name).filter(Boolean);
   const failedOptionalNames = failedOptional.map(([name]) => name).filter(Boolean);
   const ok = failedRequired.length === 0;

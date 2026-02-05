@@ -13,6 +13,10 @@ const { patchOfficialOverrides } = require("../patch/patch-official-overrides");
 const { patchCallApiShim } = require("../patch/patch-callapi-shim");
 const { patchExposeUpstream } = require("../patch/patch-expose-upstream");
 const { patchModelPickerByokOnly } = require("../patch/patch-model-picker-byok-only");
+const { patchMemoriesUpperBoundSize } = require("../patch/patch-memories-upper-bound-size");
+const { patchTasklistAutoRoot } = require("../patch/patch-tasklist-auto-root");
+const { patchTasklistAddTasksSanitizeEmptyIds } = require("../patch/patch-tasklist-add-tasks-sanitize-empty-ids");
+const { patchTasklistAddTasksErrors } = require("../patch/patch-tasklist-add-tasks-errors");
 const { patchPackageJsonCommands } = require("../patch/patch-package-json-commands");
 const { patchWebviewToolUseFallback } = require("../patch/patch-webview-tooluse-fallback");
 const { patchWebviewHistorySummaryNode } = require("../patch/patch-webview-history-summary-node");
@@ -74,6 +78,18 @@ function applyByokPatches({ repoRoot, extensionDir, pkgPath, extJsPath, intercep
 
   log(`patch model picker (BYOK-only models when enabled)`);
   patchModelPickerByokOnly(extJs);
+
+  log(`patch memories (remember tool upper_bound_size fallback)`);
+  patchMemoriesUpperBoundSize(extJs);
+
+  log(`patch tasklist tools (auto root task init)`);
+  patchTasklistAutoRoot(extJs);
+
+  log(`patch tasklist tools (add_tasks sanitize empty optional IDs)`);
+  patchTasklistAddTasksSanitizeEmptyIds(extJs);
+
+  log(`patch tasklist tools (add_tasks error reporting)`);
+  patchTasklistAddTasksErrors(extJs);
 
   log(`guard: no autoAuth`);
   guardNoAutoAuth(extJs);
