@@ -22,8 +22,8 @@ async function buildCtx({ provider, kind } = {}) {
     endpoint: ep,
     cfg: {},
     provider,
-    model: "gpt-4o-mini",
-    requestedModel: "gpt-4o-mini",
+    model: "gpt-5.3-codex",
+    requestedModel: "gpt-5.3-codex",
     body: { message: "hi" },
     timeoutMs: 1,
     abortSignal: null,
@@ -60,15 +60,15 @@ test("buildByokAugmentChatContext: respects gemini generationConfig.maxOutputTok
 
 test("buildByokAugmentChatContext: auto max_output_tokens accounts for multibyte (CJK) prompts", async () => {
   const provider = makeProvider({ type: "openai_compatible", requestDefaults: {} });
-  const big = "你".repeat(90000);
+  const big = "你".repeat(500000);
 
   const ctx = await buildByokAugmentChatContext({
     kind: "chat-stream",
     endpoint: "/chat-stream",
     cfg: {},
     provider,
-    model: "gpt-4o-mini",
-    requestedModel: "gpt-4o-mini",
+    model: "gpt-5.3-codex",
+    requestedModel: "gpt-5.3-codex",
     body: { message: big },
     timeoutMs: 1,
     abortSignal: null,

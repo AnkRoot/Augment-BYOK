@@ -181,6 +181,52 @@
         }
         const hsPrompt = qs("#historySummaryPrompt");
         if (hsPrompt) cfg.historySummary.prompt = normalizeStr(hsPrompt.value);
+        const setOptionalInt = (selector, key, { min = 0 } = {}) => {
+          const raw = normalizeStr(qs(selector)?.value);
+          if (!raw) {
+            delete cfg.historySummary[key];
+            return;
+          }
+          const n = Number(raw);
+          if (!Number.isFinite(n)) return;
+          const v = Math.floor(n);
+          if (v < Number(min)) return;
+          cfg.historySummary[key] = v;
+        };
+        const setOptionalNumber = (selector, key, { min = 0, max = Number.POSITIVE_INFINITY } = {}) => {
+          const raw = normalizeStr(qs(selector)?.value);
+          if (!raw) {
+            delete cfg.historySummary[key];
+            return;
+          }
+          const n = Number(raw);
+          if (!Number.isFinite(n)) return;
+          if (n < Number(min) || n > Number(max)) return;
+          cfg.historySummary[key] = n;
+        };
+        const hsTriggerStrategy = normalizeStr(qs("#historySummaryTriggerStrategy")?.value).toLowerCase();
+        if (hsTriggerStrategy) cfg.historySummary.triggerStrategy = hsTriggerStrategy;
+        setOptionalInt("#historySummaryTriggerOnHistorySizeChars", "triggerOnHistorySizeChars", { min: 1 });
+        setOptionalNumber("#historySummaryTriggerOnContextRatio", "triggerOnContextRatio", { min: 0.1, max: 0.95 });
+        setOptionalNumber("#historySummaryTargetContextRatio", "targetContextRatio", { min: 0.1, max: 0.95 });
+        setOptionalInt("#historySummaryHistoryTailSizeCharsToExclude", "historyTailSizeCharsToExclude", { min: 0 });
+        setOptionalInt("#historySummaryMinTailExchanges", "minTailExchanges", { min: 1 });
+        setOptionalInt("#historySummaryMaxTokens", "maxTokens", { min: 1 });
+        setOptionalInt("#historySummaryTimeoutSeconds", "timeoutSeconds", { min: 1 });
+        setOptionalInt("#historySummaryCacheTtlMs", "cacheTtlMs", { min: 0 });
+        setOptionalInt("#historySummaryMaxSummarizationInputChars", "maxSummarizationInputChars", { min: 0 });
+        setOptionalInt("#historySummaryContextWindowTokensDefault", "contextWindowTokensDefault", { min: 0 });
+        const hsRollingSummary = qs("#historySummaryRollingSummary");
+        if (hsRollingSummary) cfg.historySummary.rollingSummary = Boolean(hsRollingSummary.checked);
+        const hsContextWindowOverridesRaw = normalizeStr(qs("#historySummaryContextWindowTokensOverrides")?.value);
+        if (!hsContextWindowOverridesRaw) {
+          delete cfg.historySummary.contextWindowTokensOverrides;
+        } else {
+          try {
+            const parsed = JSON.parse(hsContextWindowOverridesRaw);
+            if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) cfg.historySummary.contextWindowTokensOverrides = parsed;
+          } catch {}
+        }
 
         cfg.routing = cfg.routing && typeof cfg.routing === "object" ? cfg.routing : {};
 

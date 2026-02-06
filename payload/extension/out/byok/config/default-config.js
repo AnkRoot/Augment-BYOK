@@ -1,5 +1,7 @@
 "use strict";
 
+const { BUILTIN_CONTEXT_WINDOW_TOKENS_OVERRIDES } = require("../core/token-budget/context-window");
+
 function defaultConfig() {
   return {
     version: 1,
@@ -18,7 +20,7 @@ function defaultConfig() {
       triggerOnContextRatio: 0.7,
       targetContextRatio: 0.55,
       contextWindowTokensDefault: 0,
-      contextWindowTokensOverrides: {},
+      contextWindowTokensOverrides: { ...BUILTIN_CONTEXT_WINDOW_TOKENS_OVERRIDES },
       historyTailSizeCharsToExclude: 250000,
       minTailExchanges: 2,
       cacheTtlMs: 0,
@@ -47,8 +49,8 @@ function defaultConfig() {
         type: "openai_compatible",
         baseUrl: "https://api.openai.com/v1",
         apiKey: "",
-        models: ["gpt-4o-mini"],
-        defaultModel: "gpt-4o-mini",
+        models: ["gpt-5.2"],
+        defaultModel: "gpt-5.2",
         headers: {},
         requestDefaults: {}
       },
@@ -57,8 +59,8 @@ function defaultConfig() {
         type: "anthropic",
         baseUrl: "https://api.anthropic.com/v1",
         apiKey: "",
-        models: ["claude-3-5-sonnet-20241022"],
-        defaultModel: "claude-3-5-sonnet-20241022",
+        models: ["claude-4.6-sonnet"],
+        defaultModel: "claude-4.6-sonnet",
         headers: {},
         requestDefaults: {}
       }

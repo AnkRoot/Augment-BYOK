@@ -42,6 +42,36 @@ test("historySummary: end_part_full supports truncation via end_part_full_max_ch
   assert.ok(rendered.includes("…"));
 });
 
+test("historySummary: end_part_full includes response_text when response_nodes empty", () => {
+  const v = {
+    message_template: "{end_part_full}",
+    summary_text: "",
+    summarization_request_id: "sid",
+    history_beginning_dropped_num_exchanges: 0,
+    history_middle_abridged_text: "",
+    history_end: [{ request_message: "u", response_text: "assistant says hi", request_nodes: [], response_nodes: [] }]
+  };
+
+  const rendered = renderHistorySummaryNodeValue(v, []);
+  assert.ok(rendered);
+  assert.ok(rendered.includes("assistant says hi"));
+});
+
+test("historySummary: placeholder replacement does not replace inside inserted values", () => {
+  const v = {
+    message_template: "SUMMARY:\n{summary}\nEND:\n{end_part_full}",
+    summary_text: "keep {end_part_full} literal",
+    summarization_request_id: "sid",
+    history_beginning_dropped_num_exchanges: 0,
+    history_middle_abridged_text: "",
+    history_end: [{ request_message: "u", response_text: "a", request_nodes: [], response_nodes: [] }]
+  };
+
+  const rendered = renderHistorySummaryNodeValue(v, []);
+  assert.ok(rendered);
+  assert.ok(rendered.includes("keep {end_part_full} literal"));
+});
+
 test("context-retry fallback: shrinks history_end and avoids tool_result orphan starts", () => {
   const req = {
     message: "hi",

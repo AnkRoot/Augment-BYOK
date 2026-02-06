@@ -44,6 +44,7 @@ test("normalizeConfig: strips prototype-pollution keys recursively", () => {
   assert.equal(Object.prototype.hasOwnProperty.call(requestDefaults, "prototype"), false);
 
   const overrides = cfg.historySummary.contextWindowTokensOverrides;
+  assert.equal(overrides["gpt-5.3-codex"], 400000);
   assert.equal(overrides["gpt-4o"], 128000);
   assert.equal(Object.prototype.hasOwnProperty.call(overrides, "__proto__"), false);
   assert.equal(overrides.polluted3, undefined);

@@ -115,3 +115,49 @@ test("historySummary cache: rejects when boundary missing but start unchanged (r
   assert.equal(stateStale, null);
 });
 
+test("historySummary cache: accepts trimmed past boundary when current start is in cached tail head ids", async () => {
+  const storage = makeStorage();
+  setHistorySummaryStorage(storage);
+
+  const history = [ex("r1"), ex("r2"), ex("r3"), ex("r4"), ex("r5")];
+  const boundaryRequestId = "r3";
+  const droppedHead = history.slice(0, 2);
+  const tail = history.slice(2);
+
+  await cachePut("c1", boundaryRequestId, "SUMMARY", "s1", 1, {
+    startRequestId: historyStartRequestId(history),
+    summarizedUntilIndex: droppedHead.length,
+    summarizedRequestIdsHash: computeRequestIdsHash(droppedHead),
+    summarizedTailRequestIds: tailRequestIds(droppedHead, DEFAULT_SUMMARY_TAIL_REQUEST_IDS),
+    summarizedTailHeadRequestIds: tail.map((h) => h.request_id)
+  });
+
+  // 模拟前端进一步裁剪：start 变了且 boundary 不在历史里，但仍在当时 tail 范围内。
+  const trimmedAfterBoundary = [ex("r4"), ex("r5")];
+  const stateOk = cacheGetFreshState("c1", 2, 999999, { history: trimmedAfterBoundary });
+  assert.ok(stateOk);
+  assert.equal(stateOk.summaryText, "SUMMARY");
+});
+
+test("historySummary cache: rejects fork when boundary missing and start shifted outside cached tail head ids", async () => {
+  const storage = makeStorage();
+  setHistorySummaryStorage(storage);
+
+  const history = [ex("r1"), ex("r2"), ex("r3"), ex("r4"), ex("r5")];
+  const boundaryRequestId = "r3";
+  const droppedHead = history.slice(0, 2);
+  const tail = history.slice(2);
+
+  await cachePut("c1", boundaryRequestId, "OLD_SUMMARY", "s1", 1, {
+    startRequestId: historyStartRequestId(history),
+    summarizedUntilIndex: droppedHead.length,
+    summarizedRequestIdsHash: computeRequestIdsHash(droppedHead),
+    summarizedTailRequestIds: tailRequestIds(droppedHead, DEFAULT_SUMMARY_TAIL_REQUEST_IDS),
+    summarizedTailHeadRequestIds: tail.map((h) => h.request_id)
+  });
+
+  // 构造分叉历史：start 变了且 boundary 不存在，也不属于当时 tail。
+  const forked = [ex("f1"), ex("f2")];
+  const stateStale = cacheGetFreshState("c1", 2, 999999, { history: forked });
+  assert.equal(stateStale, null);
+});

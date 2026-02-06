@@ -53,6 +53,7 @@ function buildExchangeRenderCtx(ex) {
   const requestMessage = asString(pick(r, ["request_message", "requestMessage"])) || "";
   const requestNodes = asArray(pick(r, ["request_nodes", "requestNodes"]));
   const responseNodes = asArray(pick(r, ["response_nodes", "responseNodes"]));
+  const responseTextFallback = asString(pick(r, ["response_text", "responseText"])) || "";
 
   const userMessageFromNodes = requestNodes
     .filter((n) => normalizeNodeType(n) === REQUEST_NODE_TEXT && pick(n, ["text_node", "textNode"]) != null)
@@ -79,10 +80,11 @@ function buildExchangeRenderCtx(ex) {
     .filter((s) => s.length > 0)
     .join("\n");
 
-  const responseText = responseNodes
+  const responseTextFromNodes = responseNodes
     .filter((n) => normalizeNodeType(n) === RESPONSE_NODE_RAW_RESPONSE)
     .map((n) => asString(pick(n, ["content"])))
     .join("\n");
+  const responseText = responseTextFromNodes || responseTextFallback;
 
   const toolUses = responseNodes
     .filter((n) => normalizeNodeType(n) === RESPONSE_NODE_TOOL_USE && pick(n, ["tool_use", "toolUse"]) != null)
@@ -136,12 +138,23 @@ function renderExchangeFull(ctx) {
 }
 
 function replacePlaceholders(template, repl) {
-  let out = asString(template);
-  for (const [k, v] of Array.isArray(repl) ? repl : []) {
-    if (!out.includes(k)) continue;
-    out = out.split(k).join(asString(v));
+  const t = asString(template);
+  const pairs = Array.isArray(repl) ? repl : [];
+  if (!pairs.length) return t;
+
+  const map = Object.create(null);
+  for (const [k, v] of pairs) {
+    const key = asString(k);
+    if (!key) continue;
+    map[key] = asString(v);
   }
-  return out;
+
+  const keys = Object.keys(map);
+  if (!keys.length) return t;
+
+  const escapeRegExp = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const re = new RegExp(keys.map(escapeRegExp).join("|"), "g");
+  return t.replace(re, (m) => (Object.prototype.hasOwnProperty.call(map, m) ? map[m] : m));
 }
 
 function normalizeHistoryEndExchange(raw) {
@@ -281,9 +294,10 @@ function collectRequestNodesFromReq(req) {
 }
 
 function exchangeHasToolResults(exchange) {
-  const ex = asRecord(exchange);
-  const nodes = asArray(pick(ex, ["request_nodes", "requestNodes"]));
-  return nodes.some((n) => normalizeNodeType(n) === REQUEST_NODE_TOOL_RESULT && pick(n, ["tool_result_node", "toolResultNode"]) != null);
+  const nodes = collectRequestNodesFromExchange(exchange);
+  return nodes.some(
+    (n) => normalizeNodeType(n) === REQUEST_NODE_TOOL_RESULT && pick(n, ["tool_result_node", "toolResultNode"]) != null
+  );
 }
 
 function dropToolResultOrphanStart(exchanges) {

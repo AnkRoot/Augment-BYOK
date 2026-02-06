@@ -237,6 +237,30 @@
     const hsModel = normalizeStr(historySummary.model);
     const hsByokModel = hsProviderId && hsModel ? `byok:${hsProviderId}:${hsModel}` : "";
     const hsPrompt = normalizeStr(historySummary.prompt);
+    const hsTriggerStrategyRaw = normalizeStr(historySummary.triggerStrategy).toLowerCase();
+    const hsTriggerStrategy = hsTriggerStrategyRaw === "ratio" || hsTriggerStrategyRaw === "chars" ? hsTriggerStrategyRaw : "auto";
+    const numberOrEmpty = (v) => {
+      const n = Number(v);
+      return Number.isFinite(n) ? String(n) : "";
+    };
+    const hsTriggerOnContextRatio = numberOrEmpty(historySummary.triggerOnContextRatio);
+    const hsTargetContextRatio = numberOrEmpty(historySummary.targetContextRatio);
+    const hsTriggerOnHistorySizeChars = numberOrEmpty(historySummary.triggerOnHistorySizeChars);
+    const hsContextWindowTokensDefault = numberOrEmpty(historySummary.contextWindowTokensDefault);
+    const hsHistoryTailSizeCharsToExclude = numberOrEmpty(historySummary.historyTailSizeCharsToExclude);
+    const hsMinTailExchanges = numberOrEmpty(historySummary.minTailExchanges);
+    const hsMaxTokens = numberOrEmpty(historySummary.maxTokens);
+    const hsTimeoutSeconds = numberOrEmpty(historySummary.timeoutSeconds);
+    const hsCacheTtlMs = numberOrEmpty(historySummary.cacheTtlMs);
+    const hsMaxSummarizationInputChars = numberOrEmpty(historySummary.maxSummarizationInputChars);
+    const hsRollingSummary = historySummary.rollingSummary === true;
+    let hsContextWindowTokensOverrides = "";
+    try {
+      const overrides = historySummary.contextWindowTokensOverrides;
+      if (overrides && typeof overrides === "object" && !Array.isArray(overrides) && Object.keys(overrides).length) {
+        hsContextWindowTokensOverrides = JSON.stringify(overrides, null, 2);
+      }
+    } catch {}
     const hsModelGroups = providers
       .map((p) => {
         const pid = normalizeStr(p?.id);
@@ -279,7 +303,7 @@
                   })
                   .join("")}
 	              </select>
-	              <div class="text-muted text-xs">留空则跟随当前对话模型；候选项来自 providers[].models。</div>
+	              <div class="text-muted text-xs">留空则跟随当前请求模型（仅用于“生成摘要”）；触发窗口判断始终基于当前对话模型。</div>
 	            </div>
 	            <div class="form-group form-grid--full">
 	              <div class="flex-row flex-wrap">
@@ -292,13 +316,77 @@
                   <summary class="endpoint-group-summary">
                     <span>Advanced</span>
                     <span class="row" style="gap:6px;">
+                      <span class="badge">trigger</span>
+                      <span class="badge">tail</span>
+                      <span class="badge">cache</span>
+                      <span class="badge">window</span>
                       <span class="badge">prompt</span>
                     </span>
                   </summary>
                   <div class="endpoint-group-body">
-                    <div class="text-muted text-xs">用于生成“滚动摘要”的 prompt（保存后对后续摘要生效）。</div>
+	                    <div class="text-muted text-xs">高级参数可选；留空会回落默认值。内置已覆盖常见编程模型（Claude4/GPT5/Gemini/Kimi）。</div>
                     <div style="height:10px;"></div>
                     <div class="form-grid">
+                      <div class="form-group">
+                        <label class="form-label" for="historySummaryTriggerStrategy">Trigger Strategy</label>
+                        <select id="historySummaryTriggerStrategy">
+                          ${optionHtml({ value: "auto", label: "auto (recommended)", selected: hsTriggerStrategy === "auto" })}
+                          ${optionHtml({ value: "ratio", label: "ratio", selected: hsTriggerStrategy === "ratio" })}
+                          ${optionHtml({ value: "chars", label: "chars", selected: hsTriggerStrategy === "chars" })}
+                        </select>
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label" for="historySummaryTriggerOnHistorySizeChars">Trigger Chars (fallback)</label>
+                        <input id="historySummaryTriggerOnHistorySizeChars" type="number" min="1" step="1" value="${escapeHtml(hsTriggerOnHistorySizeChars)}" placeholder="800000" />
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label" for="historySummaryTriggerOnContextRatio">Trigger Ratio</label>
+                        <input id="historySummaryTriggerOnContextRatio" type="number" min="0.1" max="0.95" step="0.01" value="${escapeHtml(hsTriggerOnContextRatio)}" placeholder="0.70" />
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label" for="historySummaryTargetContextRatio">Target Ratio</label>
+                        <input id="historySummaryTargetContextRatio" type="number" min="0.1" max="0.95" step="0.01" value="${escapeHtml(hsTargetContextRatio)}" placeholder="0.55" />
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label" for="historySummaryHistoryTailSizeCharsToExclude">Tail Chars Exclude</label>
+                        <input id="historySummaryHistoryTailSizeCharsToExclude" type="number" min="0" step="1" value="${escapeHtml(hsHistoryTailSizeCharsToExclude)}" placeholder="250000" />
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label" for="historySummaryMinTailExchanges">Min Tail Exchanges</label>
+                        <input id="historySummaryMinTailExchanges" type="number" min="1" step="1" value="${escapeHtml(hsMinTailExchanges)}" placeholder="2" />
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label" for="historySummaryMaxTokens">Summary Max Tokens</label>
+                        <input id="historySummaryMaxTokens" type="number" min="1" step="1" value="${escapeHtml(hsMaxTokens)}" placeholder="1024" />
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label" for="historySummaryTimeoutSeconds">Summary Timeout (s)</label>
+                        <input id="historySummaryTimeoutSeconds" type="number" min="1" step="1" value="${escapeHtml(hsTimeoutSeconds)}" placeholder="60" />
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label" for="historySummaryCacheTtlMs">Cache TTL (ms)</label>
+                        <input id="historySummaryCacheTtlMs" type="number" min="0" step="1" value="${escapeHtml(hsCacheTtlMs)}" placeholder="0" />
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label" for="historySummaryMaxSummarizationInputChars">Summarization Input Chars</label>
+                        <input id="historySummaryMaxSummarizationInputChars" type="number" min="0" step="1" value="${escapeHtml(hsMaxSummarizationInputChars)}" placeholder="250000" />
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label" for="historySummaryContextWindowTokensDefault">Context Window Default (tokens)</label>
+                        <input id="historySummaryContextWindowTokensDefault" type="number" min="0" step="1" value="${escapeHtml(hsContextWindowTokensDefault)}" placeholder="0" />
+                      </div>
+                      <div class="form-group">
+                        <label class="form-label">Rolling Summary</label>
+                        <label class="checkbox-wrapper">
+                          <input type="checkbox" id="historySummaryRollingSummary" ${hsRollingSummary ? "checked" : ""} />
+                          <span>启用缓存增量摘要</span>
+                        </label>
+                      </div>
+                      <div class="form-group form-grid--full">
+                        <label class="form-label" for="historySummaryContextWindowTokensOverrides">Context Window Overrides (JSON object)</label>
+                        <textarea class="mono" id="historySummaryContextWindowTokensOverrides" rows="6" placeholder='{"gpt-5.3-codex":400000,"gpt-5.2":400000,"claude-4.6-opus":1000000,"gemini-3-pro":1000000,"kimi-k2":128000}'>${escapeHtml(hsContextWindowTokensOverrides)}</textarea>
+                        <div class="text-muted text-xs">按“当前对话模型名”子串匹配，长度优先；大小写不敏感。此项不改变摘要模型。</div>
+                      </div>
                       <div class="form-group form-grid--full">
                         <label class="form-label" for="historySummaryPrompt">Prompt</label>
                         <textarea class="mono" id="historySummaryPrompt" rows="6" placeholder="(default)">${escapeHtml(hsPrompt)}</textarea>

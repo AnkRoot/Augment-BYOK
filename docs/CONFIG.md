@@ -62,17 +62,33 @@
 - `prompts`：多功能提示词（追加到 system prompt；仅对 BYOK 生效）
   - `endpointSystem[endpoint]`：按 endpoint 追加（例如 `/chat`、`/chat-stream`、`/edit`…；留空=不追加）
 - `historySummary`：历史摘要（自动压缩上下文，避免溢出；仅影响发给上游模型的内容）
-  - 面板显式暴露：`enabled` + `byok model` 选择（保存时映射为 `providerId` + `model`）
-  - 面板 Advanced：`prompt`（用于生成滚动摘要；保存后对后续摘要生效）
-  - 触发策略（Advanced/JSON）
+  - 面板显式暴露：`enabled` + `byok model` 选择（保存时映射为 `providerId` + `model`，仅用于“生成摘要”）
+  - 面板 Advanced：
+    - `prompt`
+    - `triggerStrategy` / `triggerOnContextRatio` / `targetContextRatio` / `triggerOnHistorySizeChars`
+    - `historyTailSizeCharsToExclude` / `minTailExchanges`
+    - `maxTokens` / `timeoutSeconds` / `maxSummarizationInputChars`
+    - `rollingSummary` / `cacheTtlMs`
+    - `contextWindowTokensDefault` / `contextWindowTokensOverrides(JSON)`
+    - 仍建议在 JSON 中维护的重度字段：`summaryNodeRequestMessageTemplate` / `abridgedHistoryParams`
+  - 触发判定（Advanced/JSON）
     - `triggerStrategy`：`auto | ratio | chars`（推荐 `auto`）
-    - `triggerOnContextRatio` / `targetContextRatio`：按模型上下文比例触发与目标（`auto/ratio` 生效）
-    - `triggerOnHistorySizeChars`：纯 chars 兜底阈值（`chars` 生效；`auto` 时也用于上限保护）
-    - `contextWindowTokensDefault` / `contextWindowTokensOverrides`：当模型名无法推断上下文长度时手动指定
-  - Tail 保留（Advanced/JSON）
-    - `historyTailSizeCharsToExclude`：保留末尾多少 chars 的原文进入 `{end_part_full}`
-    - `minTailExchanges`：无论 chars 预算如何，尾部至少保留多少 exchanges（避免“工具结果孤儿”）
-  - 说明：BYOK 在 `runtimeEnabled=true` 时会 patch 上游，禁用 Augment 客户端的 `limitChatHistory` 硬裁剪；因此不再支持按“轮数”触发/保留 tail 的旧字段
+    - `triggerOnContextRatio` / `targetContextRatio`：上下文占比触发与目标（`auto/ratio` 生效；默认约 70% 触发，目标约 55%）
+    - `triggerOnHistorySizeChars`：chars 基准阈值（`chars` 直接使用；`auto/ratio` 在无法推断上下文窗口时回退）
+    - 触发体积按 `history + message + prefix/selected_code/suffix/diff` 统一估算（UTF-8 bytes）
+    - 上下文窗口基准模型：优先当前对话模型 `requestedModel`（缺失时回退本次请求模型），与 `historySummary.model` 解耦
+    - `contextWindowTokensOverrides` / `contextWindowTokensDefault`：模型窗口覆盖；`overrides` 按**最长子串、大小写不敏感**匹配
+    - 默认已内置编程模型族：Claude 4.x（Sonnet/Opus）、GPT-5.x（含 5.3-codex / max）、Gemini 2.5/3（Pro/Flash）、Kimi
+    - 常见 `contextWindowTokensOverrides` 示例：`gpt-5.3-codex=400000`、`gpt-5.2=400000`、`claude-4.6-opus=1000000`、`gemini-3-pro=1000000`、`kimi-k2=128000`
+  - Tail 切分与注入
+    - `historyTailSizeCharsToExclude`：尾部原文预算（进入 `{end_part_full}`）
+    - `minTailExchanges`：最少保留尾部轮次（防止 tool_result 孤儿）
+    - 一旦触发，不会再被“history-only 阈值”二次否决（避免判定触发但不注入）
+    - 当前请求若已含 summary node 才跳过；`chat_history` 已含旧 summary 时仍可刷新为新 summary
+  - 缓存与兼容
+    - `rollingSummary=true` + `cacheTtlMs`：缓存摘要，降低重复 summarization 成本
+    - 仅在 `chat_history` 已缺失 summary exchange 时才会走“缓存补回”路径
+  - 说明：`runtimeEnabled=true` 时会 patch 上游并禁用客户端 `limitChatHistory` 硬裁剪；旧的按轮数触发/保留字段不再生效
 
 ## 鉴权（apiKey / headers）
 

@@ -7,12 +7,12 @@ const { inferContextWindowTokensFromModelName } = require("../../token-budget/co
 const { asRecord } = shared;
 
 function resolveContextWindowTokens(hs, requestedModel) {
-  const model = normalizeString(requestedModel);
+  const model = normalizeString(requestedModel).toLowerCase();
   if (!model) return null;
   const overrides = asRecord(hs?.contextWindowTokensOverrides);
   const keys = Object.keys(overrides).sort((a, b) => String(b).length - String(a).length);
   for (const k of keys) {
-    const key = normalizeString(k);
+    const key = normalizeString(k).toLowerCase();
     const v = Number(overrides[k]);
     if (!key || !Number.isFinite(v) || v <= 0) continue;
     if (model.includes(key)) return Math.floor(v);

@@ -359,7 +359,8 @@
     }
 
     if (el.matches("[data-p-key=\"defaultModel\"],[data-p-key=\"thinkingLevel\"]")) return setUiState({ status: "Provider updated (pending save).", dirty: true }, { preserveEdits: true });
-    if (el.matches("#historySummaryEnabled,#historySummaryByokModel")) return markDirty("History summary updated (pending save).");
+    if (el.matches("#historySummaryEnabled,#historySummaryByokModel,#historySummaryRollingSummary,#historySummaryTriggerStrategy"))
+      return markDirty("History summary updated (pending save).");
   }
 
   function handleInput(el) {

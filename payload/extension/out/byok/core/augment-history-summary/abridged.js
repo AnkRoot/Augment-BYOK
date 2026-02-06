@@ -158,10 +158,17 @@ function buildAbridgedHistoryText(history, params, untilRequestId) {
   const hs = shared.asArray(history);
   const limit = Number.isFinite(Number(params?.totalCharsLimit)) && Number(params.totalCharsLimit) > 0 ? Math.floor(Number(params.totalCharsLimit)) : 0;
   let slice = hs;
-  const rid = normalizeString(untilRequestId);
-  if (rid) {
-    const pos = hs.findIndex((h) => normalizeString(h?.request_id) === rid);
-    if (pos >= 0) slice = hs.slice(0, pos);
+  const untilIdxRaw = typeof untilRequestId === "number" ? untilRequestId : null;
+  const untilIdx = untilIdxRaw != null && Number.isFinite(Number(untilIdxRaw)) ? Math.floor(Number(untilIdxRaw)) : null;
+  if (untilIdx != null) {
+    const idx = Math.max(0, Math.min(hs.length, untilIdx));
+    slice = hs.slice(0, idx);
+  } else {
+    const rid = normalizeString(untilRequestId);
+    if (rid) {
+      const pos = hs.findIndex((h) => normalizeString(h?.request_id) === rid);
+      if (pos >= 0) slice = hs.slice(0, pos);
+    }
   }
   const entries = buildAbridgedEntries(slice);
   let total = 0;

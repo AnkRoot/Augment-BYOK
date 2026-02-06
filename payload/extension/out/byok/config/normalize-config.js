@@ -111,7 +111,7 @@ function normalizeConfig(raw) {
       hs.contextWindowTokensDefault = Math.floor(Number(contextWindowTokensDefault));
     const contextWindowTokensOverrides = historySummary.contextWindowTokensOverrides;
     if (contextWindowTokensOverrides && typeof contextWindowTokensOverrides === "object" && !Array.isArray(contextWindowTokensOverrides))
-      hs.contextWindowTokensOverrides = contextWindowTokensOverrides;
+      hs.contextWindowTokensOverrides = { ...hs.contextWindowTokensOverrides, ...contextWindowTokensOverrides };
     const historyTailSizeCharsToExclude = historySummary.historyTailSizeCharsToExclude;
     if (Number.isFinite(Number(historyTailSizeCharsToExclude)) && Number(historyTailSizeCharsToExclude) >= 0)
       hs.historyTailSizeCharsToExclude = Math.floor(Number(historyTailSizeCharsToExclude));

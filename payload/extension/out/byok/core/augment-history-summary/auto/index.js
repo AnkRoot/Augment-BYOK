@@ -24,12 +24,15 @@ const { resolveContextWindowTokens, resolveHistorySummaryConfig, pickProviderByI
 const { computeTailSelection } = require("./tail-selection");
 const {
   DEFAULT_SUMMARY_TAIL_REQUEST_IDS,
+  exchangeRequestId,
   historyStartRequestId,
   tailRequestIds,
   computeRequestIdsHash
 } = require("../consistency");
 
 const { asRecord, asArray, asString, pick, normalizeNodeType } = shared;
+
+const DEFAULT_SUMMARY_TAIL_HEAD_REQUEST_IDS = 64;
 
 function nowMs() {
   return Date.now();
@@ -73,22 +76,33 @@ function requestContainsSummary(req) {
   return hasHistorySummaryNode(nodes);
 }
 
-function computeTriggerDecision({ hs, requestedModel, totalWithExtraBytes, convId }) {
+function clampNumber(raw, min, max, fallback) {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
+function resolveTriggerRatios(hs) {
+  const triggerRatio = clampNumber(hs?.triggerOnContextRatio, 0.6, 0.8, 0.7);
+  const targetFallback = Math.max(0.4, Math.min(0.7, triggerRatio - 0.15));
+  let targetRatio = clampNumber(hs?.targetContextRatio, 0.35, 0.75, targetFallback);
+  if (targetRatio >= triggerRatio) targetRatio = Math.max(0.35, triggerRatio - 0.05);
+  return { triggerRatio, targetRatio };
+}
+
+function computeTriggerDecision({ hs, triggerModel, totalWithExtraBytes, convId }) {
   const triggerOnHistorySizeBytes = Number(hs.triggerOnHistorySizeChars);
   const baseDecision = { kind: "size", thresholdChars: triggerOnHistorySizeBytes, tailExcludeChars: hs.historyTailSizeCharsToExclude };
   const strategy = normalizeString(hs.triggerStrategy).toLowerCase();
 
   if (strategy === "chars") return totalWithExtraBytes >= triggerOnHistorySizeBytes ? baseDecision : null;
 
-  const cwTokensRaw = resolveContextWindowTokens(hs, requestedModel);
-  const cwTokens =
-    strategy === "auto" && cwTokensRaw ? Math.min(cwTokensRaw, Math.max(0, Math.floor(triggerOnHistorySizeBytes / 4))) : cwTokensRaw;
+  const cwTokens = resolveContextWindowTokens(hs, triggerModel);
   if ((strategy === "ratio" || strategy === "auto") && cwTokens) {
     const approxTotalTokens = approxTokenCountFromByteLen(totalWithExtraBytes);
     const ratio = cwTokens ? approxTotalTokens / cwTokens : 0;
-    const triggerRatio = Number(hs.triggerOnContextRatio) || 0.7;
+    const { triggerRatio, targetRatio } = resolveTriggerRatios(hs);
     if (ratio < triggerRatio) return null;
-    const targetRatio = Number(hs.targetContextRatio) || 0.55;
     const thresholdTokens = Math.ceil(cwTokens * triggerRatio);
     const thresholdChars = thresholdTokens * 4;
     const targetTokens = Math.floor(cwTokens * targetRatio);
@@ -96,7 +110,7 @@ function computeTriggerDecision({ hs, requestedModel, totalWithExtraBytes, convI
     const summaryOverhead = (Number(hs.abridgedHistoryParams?.totalCharsLimit) || 0) + (Number(hs.maxTokens) || 0) * 4 + 4096;
     const tailExcludeChars = Math.max(0, targetCharsBudget - summaryOverhead);
     debug(
-      `historySummary trigger ratio: conv=${convId} model=${normalizeString(requestedModel)} tokens≈${approxTotalTokens}/${cwTokens} ratio≈${ratio.toFixed(3)}`
+      `historySummary trigger ratio: conv=${convId} model=${normalizeString(triggerModel)} tokens≈${approxTotalTokens}/${cwTokens} ratio≈${ratio.toFixed(3)} trigger=${triggerRatio} target=${targetRatio}`
     );
     return { kind: "ratio", thresholdChars, tailExcludeChars };
   }
@@ -175,11 +189,18 @@ async function resolveSummaryText({
   );
   if (!summaryText) return null;
   const summarizationRequestId = `byok_history_summary_${now}`;
+  const tailHeadRequestIds = [];
+  const tailStartIdx = Number.isFinite(Number(tailStart)) ? Math.max(0, Math.floor(Number(tailStart))) : droppedHead.length;
+  for (let i = tailStartIdx; i < history.length && tailHeadRequestIds.length < DEFAULT_SUMMARY_TAIL_HEAD_REQUEST_IDS; i++) {
+    const id = exchangeRequestId(history[i]);
+    if (id) tailHeadRequestIds.push(id);
+  }
   await cachePut(convId, boundaryRequestId, summaryText, summarizationRequestId, now, {
     startRequestId: historyStartRequestId(history),
     summarizedUntilIndex: droppedHead.length,
     summarizedRequestIdsHash: computeRequestIdsHash(droppedHead),
-    summarizedTailRequestIds: tailRequestIds(droppedHead, DEFAULT_SUMMARY_TAIL_REQUEST_IDS)
+    summarizedTailRequestIds: tailRequestIds(droppedHead, DEFAULT_SUMMARY_TAIL_REQUEST_IDS),
+    summarizedTailHeadRequestIds: tailHeadRequestIds
   });
   return { summaryText, summarizationRequestId, now };
 }
@@ -231,19 +252,20 @@ async function maybeSummarizeAndCompactAugmentChatRequest({
   if (!convId) return false;
   const history = asArray(req?.chat_history);
   if (!history.length) return false;
-  if (historyContainsSummary(history)) return false;
+  const hasSummaryInHistory = historyContainsSummary(history);
   if (requestContainsSummary(req)) return false;
 
   const msg = asString(req?.message);
   const totalBytes = estimateHistorySizeBytes(history);
   const totalWithExtraBytes = totalBytes + utf8ByteLen(msg) + estimateRequestExtraSizeBytes(req);
-  const decision = computeTriggerDecision({ hs, requestedModel, totalWithExtraBytes, convId });
+  const triggerModel = normalizeString(requestedModel) || normalizeString(fallbackModel);
+  const decision = computeTriggerDecision({ hs, triggerModel, totalWithExtraBytes, convId });
 
   if (decision) {
     const sel = computeTailSelection({ history, hs, decision });
 
     if (sel && sel.droppedHead.length) {
-      const abridged = buildAbridgedHistoryText(history, hs.abridgedHistoryParams, sel.boundaryRequestId);
+      const abridged = buildAbridgedHistoryText(history, hs.abridgedHistoryParams, sel.tailStart);
       const now = nowMs();
       let summary = null;
       try {
@@ -278,12 +300,14 @@ async function maybeSummarizeAndCompactAugmentChatRequest({
       });
       if (injected) {
         debug(
-          `historySummary injected: conv=${convId} kind=${summary ? "llm" : "fallback"} beforeBytes≈${totalBytes} tailStart=${sel.tailStart}`
+          `historySummary injected: conv=${convId} kind=${summary ? "llm" : "fallback"} beforeBytes≈${totalBytes} tailStart=${sel.tailStart} refresh=${hasSummaryInHistory ? "true" : "false"}`
         );
         return true;
       }
     }
   }
+
+  if (hasSummaryInHistory) return false;
 
   // 当 Augment 客户端已按轮数裁剪掉历史中的 summary exchange 时，仍然需要用缓存的 summary 补回“早期上下文”，否则会退化为仅剩最近 N 轮。
   const now = nowMs();
@@ -295,9 +319,8 @@ async function maybeSummarizeAndCompactAugmentChatRequest({
     hs,
     decision: { kind: "cached", thresholdChars: 0, tailExcludeChars: hs.historyTailSizeCharsToExclude }
   });
-  const boundaryRequestId2 = normalizeString(sel2?.boundaryRequestId) || normalizeString(history[0]?.request_id) || "";
   const tail2 = sel2?.tail?.length ? sel2.tail : history;
-  const abridged2 = buildAbridgedHistoryText(history, hs.abridgedHistoryParams, boundaryRequestId2);
+  const abridged2 = buildAbridgedHistoryText(history, hs.abridgedHistoryParams, Number(sel2?.tailStart) || 0);
   const summarizationRequestId =
     normalizeString(cached.summarizationRequestId) || `byok_history_summary_cached_${Number(cached.updatedAtMs) || now}`;
 

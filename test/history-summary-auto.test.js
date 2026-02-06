@@ -25,16 +25,26 @@ test("historySummary: resolveHistorySummaryConfig applies defaults and normalize
   assert.ok(hs.abridgedHistoryParams && typeof hs.abridgedHistoryParams === "object" && !Array.isArray(hs.abridgedHistoryParams));
 });
 
-test("historySummary: resolveContextWindowTokens picks longest matching override key", () => {
+test("historySummary: resolveContextWindowTokens uses longest case-insensitive override key", () => {
   const hs = {
     contextWindowTokensOverrides: {
-      "gpt": 8000,
-      "gpt-4o": 128000
+      "GPT": 8000,
+      "GpT-4O": 128000
     }
   };
 
-  const tokens = resolveContextWindowTokens(hs, "byok:openai:gpt-4o-mini");
+  const tokens = resolveContextWindowTokens(hs, "BYOK:OPENAI:gPt-4o-mini");
   assert.equal(tokens, 128000);
+});
+
+test("historySummary: resolveContextWindowTokens infers built-in coding model windows", () => {
+  assert.equal(resolveContextWindowTokens({}, "byok:openai:gpt-5.3-codex"), 400000);
+  assert.equal(resolveContextWindowTokens({}, "byok:openai:gpt-5.2"), 400000);
+  assert.equal(resolveContextWindowTokens({}, "byok:openai:gpt-5-max"), 400000);
+  assert.equal(resolveContextWindowTokens({}, "byok:anthropic:claude-4.6-opus"), 1000000);
+  assert.equal(resolveContextWindowTokens({}, "byok:google:gemini-3-flash"), 1000000);
+  assert.equal(resolveContextWindowTokens({}, "byok:moonshot:kimi-k2"), 128000);
+  assert.equal(resolveContextWindowTokens({}, "byok:openai:gpt-4o-mini"), null);
 });
 
 test("historySummary: computeTailSelection shifts boundary earlier to avoid tool_result orphan start", () => {
@@ -61,4 +71,3 @@ test("historySummary: computeTailSelection shifts boundary earlier to avoid tool
   assert.equal(sel.droppedHead[0].request_id, "r0");
   assert.equal(sel.tail[0].request_id, "r1");
 });
-

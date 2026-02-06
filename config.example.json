@@ -10,8 +10,8 @@
       "type": "openai_compatible",
       "baseUrl": "https://api.openai.com/v1",
       "apiKey": "sk-your-openai-api-key",
-      "models": ["gpt-4o-mini", "gpt-4o"],
-      "defaultModel": "gpt-4o-mini",
+      "models": ["gpt-5.2", "gpt-5.3-codex"],
+      "defaultModel": "gpt-5.2",
       "headers": {},
       "requestDefaults": { "temperature": 0.2 }
     },
@@ -20,8 +20,8 @@
       "type": "openai_responses",
       "baseUrl": "https://api.openai.com/v1",
       "apiKey": "sk-your-openai-api-key",
-      "models": ["gpt-4o-mini"],
-      "defaultModel": "gpt-4o-mini",
+      "models": ["gpt-5.3-codex"],
+      "defaultModel": "gpt-5.3-codex",
       "headers": {},
       "requestDefaults": { "reasoning": { "effort": "medium" } }
     },
@@ -30,8 +30,8 @@
       "type": "anthropic",
       "baseUrl": "https://api.anthropic.com/v1",
       "apiKey": "sk-ant-your-anthropic-api-key",
-      "models": ["claude-3-5-sonnet-20241022", "claude-3-5-haiku-20241022"],
-      "defaultModel": "claude-3-5-sonnet-20241022",
+      "models": ["claude-4.6-sonnet", "claude-4.6-opus"],
+      "defaultModel": "claude-4.6-sonnet",
       "headers": {},
       "requestDefaults": { "max_tokens": 8192 }
     },
@@ -40,10 +40,20 @@
       "type": "gemini_ai_studio",
       "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
       "apiKey": "AIza-your-gemini-api-key",
-      "models": ["models/gemini-1.5-flash", "models/gemini-1.5-pro"],
-      "defaultModel": "models/gemini-1.5-flash",
+      "models": ["models/gemini-2.5-pro", "models/gemini-2.5-flash", "models/gemini-3-pro", "models/gemini-3-flash"],
+      "defaultModel": "models/gemini-2.5-pro",
       "headers": {},
       "requestDefaults": { "generationConfig": { "temperature": 0.2 } }
+    },
+    {
+      "id": "kimi",
+      "type": "openai_compatible",
+      "baseUrl": "https://api.moonshot.cn/v1",
+      "apiKey": "sk-your-kimi-api-key",
+      "models": ["kimi-k2"],
+      "defaultModel": "kimi-k2",
+      "headers": {},
+      "requestDefaults": { "temperature": 0.2 }
     }
   ],
   "routing": {
@@ -77,7 +87,36 @@
   "historySummary": {
     "enabled": false,
     "providerId": "",
-    "model": ""
+    "model": "",
+    "triggerStrategy": "auto",
+    "triggerOnContextRatio": 0.7,
+    "targetContextRatio": 0.55,
+    "triggerOnHistorySizeChars": 800000,
+    "contextWindowTokensDefault": 0,
+    "contextWindowTokensOverrides": {
+      "gpt-5.3-codex": 400000,
+      "gpt-5.3": 400000,
+      "gpt-5.2": 400000,
+      "claude-4.6-opus": 1000000,
+      "claude-4.6-sonnet": 200000,
+      "claude-4.5-opus": 1000000,
+      "claude-4.5-sonnet": 200000,
+      "claude-4.0-opus": 1000000,
+      "claude-4.0-sonnet": 200000,
+      "gemini-3-pro": 1000000,
+      "gemini-3-flash": 1000000,
+      "gemini-2.5-pro": 1000000,
+      "gemini-2.5-flash": 1000000,
+      "kimi-k2": 128000
+    },
+    "historyTailSizeCharsToExclude": 250000,
+    "minTailExchanges": 2,
+    "maxTokens": 1024,
+    "timeoutSeconds": 60,
+    "rollingSummary": true,
+    "cacheTtlMs": 0,
+    "maxSummarizationInputChars": 250000,
+    "prompt": ""
   },
   "prompts": {
     "endpointSystem": {

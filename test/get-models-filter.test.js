@@ -33,7 +33,7 @@ test("handleGetModels: filters upstream official models when BYOK models exist",
   try {
     const out = await maybeHandleCallApi({ endpoint: "/get-models", body: {}, timeoutMs: 2000, upstreamCompletionURL: baseUrl });
     assert.ok(out && typeof out === "object");
-    assert.equal(out.default_model, "byok:openai:gpt-4o-mini");
+    assert.equal(out.default_model, "byok:openai:gpt-5.2");
     assert.ok(Array.isArray(out.models));
     assert.ok(out.models.length > 0);
     for (const m of out.models) {

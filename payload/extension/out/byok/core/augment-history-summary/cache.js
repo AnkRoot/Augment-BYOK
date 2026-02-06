@@ -83,6 +83,9 @@ function maybeLoadHistorySummaryCacheFromStorage() {
         const summarizedTailRequestIds = Array.isArray(rec.summarizedTailRequestIds ?? rec.summarized_tail_request_ids)
           ? rec.summarizedTailRequestIds ?? rec.summarized_tail_request_ids
           : [];
+        const summarizedTailHeadRequestIds = Array.isArray(rec.summarizedTailHeadRequestIds ?? rec.summarized_tail_head_request_ids)
+          ? rec.summarizedTailHeadRequestIds ?? rec.summarized_tail_head_request_ids
+          : [];
         if (!summarizedUntilRequestId) continue;
         HISTORY_SUMMARY_CACHE.set(convId, {
           summaryText,
@@ -92,7 +95,8 @@ function maybeLoadHistorySummaryCacheFromStorage() {
           startRequestId,
           summarizedUntilIndex,
           summarizedRequestIdsHash,
-          summarizedTailRequestIds
+          summarizedTailRequestIds,
+          summarizedTailHeadRequestIds
         });
       }
     }
@@ -128,7 +132,8 @@ async function persistHistorySummaryCacheToStorage() {
       startRequestId: asString(v?.startRequestId),
       summarizedUntilIndex: Number(v?.summarizedUntilIndex) || 0,
       summarizedRequestIdsHash: asString(v?.summarizedRequestIdsHash),
-      summarizedTailRequestIds: Array.isArray(v?.summarizedTailRequestIds) ? v.summarizedTailRequestIds : []
+      summarizedTailRequestIds: Array.isArray(v?.summarizedTailRequestIds) ? v.summarizedTailRequestIds : [],
+      summarizedTailHeadRequestIds: Array.isArray(v?.summarizedTailHeadRequestIds) ? v.summarizedTailHeadRequestIds : []
     };
   }
   try {
@@ -195,6 +200,7 @@ function verifyHistorySummaryCacheEntryForHistory(entry, { history, boundaryId, 
   const storedIndex = Number(e.summarizedUntilIndex);
   const storedHash = normalizeString(e.summarizedRequestIdsHash);
   const storedTailIds = Array.isArray(e.summarizedTailRequestIds) ? e.summarizedTailRequestIds : [];
+  const storedTailHeadIds = Array.isArray(e.summarizedTailHeadRequestIds) ? e.summarizedTailHeadRequestIds : [];
 
   if (!storedStart || !storedHash || !Number.isFinite(storedIndex)) return false;
 
@@ -218,8 +224,12 @@ function verifyHistorySummaryCacheEntryForHistory(entry, { history, boundaryId, 
     return tailIdsEndsWith(storedTailIds, currentTailIds);
   }
 
-  // boundary 不存在且 start 不同：通常是历史裁剪到 boundary 之后，无法验证；允许继续使用缓存以补回早期上下文。
-  return true;
+  // boundary 不存在且 start 不同：通常是历史被进一步裁剪到 boundary 之后。
+  // 为避免把旧 summary 注入到分叉/不相关的 thread 上，仅当当前 start 出现在缓存记录的 tail 头部 id 列表中时才接受（说明仍在同一条对话尾部范围内）。
+  if (currentStart && storedTailHeadIds.length) {
+    return storedTailHeadIds.some((id) => normalizeString(id) === currentStart);
+  }
+  return false;
 }
 
 async function cachePut(conversationId, boundaryRequestId, summaryText, summarizationRequestId, now, meta) {
@@ -232,6 +242,7 @@ async function cachePut(conversationId, boundaryRequestId, summaryText, summariz
   const summarizedUntilIndex = Number.isFinite(Number(m.summarizedUntilIndex)) ? Math.max(0, Math.floor(Number(m.summarizedUntilIndex))) : 0;
   const summarizedRequestIdsHash = normalizeString(m.summarizedRequestIdsHash);
   const summarizedTailRequestIds = Array.isArray(m.summarizedTailRequestIds) ? m.summarizedTailRequestIds : [];
+  const summarizedTailHeadRequestIds = Array.isArray(m.summarizedTailHeadRequestIds) ? m.summarizedTailHeadRequestIds : [];
   HISTORY_SUMMARY_CACHE.set(cid, {
     summaryText: asString(summaryText),
     summarizedUntilRequestId: bid,
@@ -240,7 +251,8 @@ async function cachePut(conversationId, boundaryRequestId, summaryText, summariz
     startRequestId,
     summarizedUntilIndex,
     summarizedRequestIdsHash,
-    summarizedTailRequestIds
+    summarizedTailRequestIds,
+    summarizedTailHeadRequestIds
   });
   await persistHistorySummaryCacheToStorage();
 }
