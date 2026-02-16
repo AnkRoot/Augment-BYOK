@@ -4,7 +4,7 @@ const fs = require("fs");
 const path = require("path");
 
 const { ensureDir, rmDir } = require("./fs");
-const { run } = require("./run");
+const { runPython } = require("./run");
 const { downloadFile } = require("./http");
 
 const DEFAULT_UPSTREAM_VSIX_URL =
@@ -41,7 +41,7 @@ function unpackVsixToWorkDir({ repoRoot, vsixPath, workDir, clean }) {
   if (shouldClean) rmDir(workAbs);
   ensureDir(workAbs);
 
-  run("python3", [path.join(root, "tools", "lib", "unzip-dir.py"), "--in", vsixAbs, "--out", workAbs], { cwd: root });
+  runPython([path.join(root, "tools", "lib", "unzip-dir.py"), "--in", vsixAbs, "--out", workAbs], { cwd: root });
 
   const extensionDir = path.join(workAbs, "extension");
   const pkgPath = path.join(extensionDir, "package.json");
@@ -59,4 +59,3 @@ module.exports = {
   ensureUpstreamVsix,
   unpackVsixToWorkDir
 };
-
