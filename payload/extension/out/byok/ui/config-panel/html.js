@@ -14,17 +14,15 @@ function renderConfigPanelHtml({ vscode, webview, ctx, init }) {
     webview.asWebviewUri(vscode.Uri.joinPath(ctx.extensionUri, "out", "byok", "ui", "config-panel", "webview", "render", "providers.js")) + `?v=${cacheBust}`;
   const renderEndpointsUri =
     webview.asWebviewUri(vscode.Uri.joinPath(ctx.extensionUri, "out", "byok", "ui", "config-panel", "webview", "render", "endpoints.js")) + `?v=${cacheBust}`;
-  const renderPromptsUri =
-    webview.asWebviewUri(vscode.Uri.joinPath(ctx.extensionUri, "out", "byok", "ui", "config-panel", "webview", "render", "prompts.js")) + `?v=${cacheBust}`;
+  const renderHistorySummaryUri =
+    webview.asWebviewUri(vscode.Uri.joinPath(ctx.extensionUri, "out", "byok", "ui", "config-panel", "webview", "render", "history-summary.js")) +
+    `?v=${cacheBust}`;
   const renderAppUri =
     webview.asWebviewUri(vscode.Uri.joinPath(ctx.extensionUri, "out", "byok", "ui", "config-panel", "webview", "render", "app.js")) + `?v=${cacheBust}`;
   const webviewDomUri =
     webview.asWebviewUri(vscode.Uri.joinPath(ctx.extensionUri, "out", "byok", "ui", "config-panel", "webview", "dom.js")) + `?v=${cacheBust}`;
   const webviewCoreUri =
     webview.asWebviewUri(vscode.Uri.joinPath(ctx.extensionUri, "out", "byok", "ui", "config-panel", "webview", "core.js")) + `?v=${cacheBust}`;
-  const webviewRecommendedPromptsUri =
-    webview.asWebviewUri(vscode.Uri.joinPath(ctx.extensionUri, "out", "byok", "ui", "config-panel", "webview", "recommended-prompts.js")) +
-    `?v=${cacheBust}`;
   const webviewHandlersUri =
     webview.asWebviewUri(vscode.Uri.joinPath(ctx.extensionUri, "out", "byok", "ui", "config-panel", "webview", "handlers.js")) + `?v=${cacheBust}`;
   const mainUri =
@@ -57,11 +55,10 @@ function renderConfigPanelHtml({ vscode, webview, ctx, init }) {
   <script src="${renderUri}"></script>
   <script src="${renderProvidersUri}"></script>
   <script src="${renderEndpointsUri}"></script>
-  <script src="${renderPromptsUri}"></script>
+  <script src="${renderHistorySummaryUri}"></script>
   <script src="${renderAppUri}"></script>
   <script src="${webviewDomUri}"></script>
   <script src="${webviewCoreUri}"></script>
-  <script src="${webviewRecommendedPromptsUri}"></script>
   <script src="${webviewHandlersUri}"></script>
   <script src="${mainUri}"></script>
 </body>
