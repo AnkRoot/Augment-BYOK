@@ -38,7 +38,7 @@ test("provider-augment-chat: convertToolDefinitionsByProviderType returns provid
   assert.equal(responses[0].parameters.additionalProperties, false);
   assert.ok(Array.isArray(responses[0].parameters.required));
   assert.ok(responses[0].parameters.required.includes("text"));
-  assert.deepEqual(responses[1].parameters.required, ["required"]);
+  assert.deepEqual(responses[1].parameters.required, ["required", "optional"]);
 
   const anthropic = convertToolDefinitionsByProviderType("anthropic", toolDefs);
   assert.equal(anthropic.length, 2);

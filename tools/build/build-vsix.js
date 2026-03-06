@@ -6,7 +6,7 @@ const path = require("path");
 const { getArgValue, hasFlag } = require("../lib/cli-args");
 const { sha256FileHex } = require("../lib/hash");
 const { ensureDir, rmDir, readJson, writeJson } = require("../lib/fs");
-const { run } = require("../lib/run");
+const { runPython } = require("../lib/run");
 const { applyByokPatches, runByokContractChecks } = require("../lib/byok-workflow");
 const { DEFAULT_UPSTREAM_VSIX_URL, DEFAULT_UPSTREAM_VSIX_REL_PATH, ensureUpstreamVsix, unpackVsixToWorkDir } = require("../lib/upstream-vsix");
 
@@ -51,7 +51,7 @@ async function main() {
   const outName = `augment.vscode-augment.${upstreamVersion}.byok.vsix`;
   const outPath = path.join(distDir, outName);
   console.log(`[build] repack VSIX -> ${path.relative(repoRoot, outPath)}`);
-  run("python3", [path.join(repoRoot, "tools", "lib", "zip-dir.py"), "--src", workDir, "--out", outPath], { cwd: repoRoot });
+  runPython([path.join(repoRoot, "tools", "lib", "zip-dir.py"), "--src", workDir, "--out", outPath], { cwd: repoRoot });
 
   const outSha = sha256FileHex(outPath);
   const lockPath = path.join(distDir, "upstream.lock.json");
